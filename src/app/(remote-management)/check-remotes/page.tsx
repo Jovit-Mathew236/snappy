@@ -331,7 +331,7 @@ const Page: React.FC = () => {
                           <div>
                             <p className="text-[#0A0A0A] font-tthoves-regular">
                               {remoteIndex === 0
-                                ? "Studnet Remote"
+                                ? "Teacher Remote"
                                 : `Student Remote ${remoteIndex}`}
                               : {remote.remote_name || "Unnamed Remote"}
                             </p>

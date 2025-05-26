@@ -16,7 +16,7 @@
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
     "redux-persist": "^6.0.0",
-    "snappy-remote": "^1.0.2"
+    "snappy-remote": "^2.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

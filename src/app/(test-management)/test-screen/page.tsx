@@ -334,7 +334,7 @@ export default function TestScreen() {
       console.log("Serial number:", Array.from(serial_number));
 
       await deviceRef.current.transferOut(2, command);
-      
+
       setUsbConnected(true);
       setError(null);
       usbListeningRef.current = true;
@@ -342,16 +342,13 @@ export default function TestScreen() {
       while (true) {
         try {
           const result = await deviceRef.current.transferIn(2, 64);
-          
+
           if (result.status === "ok" && result.data) {
             if (phase === "collecting") {
               const int8Array = new Uint8Array(result.data.buffer);
               if (int8Array.length === 17) {
                 const data = new Uint8Array([...int8Array.slice(0, 17)]);
-                const answer = decrypt(
-                  serial_number,
-                  data
-                );
+                const answer = decrypt(serial_number, data);
                 if (
                   typeof answer === "string" &&
                   answer.trim().startsWith("{")
@@ -556,7 +553,7 @@ export default function TestScreen() {
             <div className="text-lg font-tthoves p-4 text-[#4A4A4F] mt-[300px] w-full rounded-lg bg-blue-100">
               Collecting responses... ({timeLeft}s)
               <ul className={`list-disc pl-5 grid grid-cols-${gridCols}`}>
-                {allRemotes.map((remote, index) => {
+                {allRemotes.slice(1).map((remote, index) => {
                   const matchingResponse = currentResponses.find(
                     (response) =>
                       response.student_remote_id === remote.student_remote_id
