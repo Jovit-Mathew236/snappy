@@ -4,7 +4,7 @@ import "./globals.css";
 import { Providers } from "./redux/providers";
 
 export const metadata: Metadata = {
-  title: "Tinker bunker",
+  title: "Tinker bunker Remote Control",
   description: "Tinker bunker",
 };
 
