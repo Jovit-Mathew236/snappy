@@ -3,7 +3,6 @@ import Link from "next/link";
 import { useDispatch } from "react-redux";
 import { resetReceivers } from "./redux/feature/remoteSlice/remoteSlice";
 import { useState } from "react";
-import { platform } from "os";
 import { getOS } from "@/utils/getPlatform";
 
 export default function Home() {
