@@ -29,7 +29,7 @@ export default function Home() {
       window.URL.revokeObjectURL(downloadUrl);
 
       // toast.success('Zadig.exe downloaded! Please run it to install the driver.');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Download failed:", error);
 
       // toast.error('Failed to download zadig.exe: ' + error.message);
