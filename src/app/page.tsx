@@ -3,10 +3,13 @@ import Link from "next/link";
 import { useDispatch } from "react-redux";
 import { resetReceivers } from "./redux/feature/remoteSlice/remoteSlice";
 import { useState } from "react";
+import { platform } from "os";
+import { getOS } from "@/utils/getPlatform";
 
 export default function Home() {
   const [downloading, setDownloading] = useState(false);
   const dispatch = useDispatch();
+  const platform = getOS();
   const downloadHandler = async () => {
     setDownloading(true);
 
@@ -39,22 +42,26 @@ export default function Home() {
   };
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 flex-col gap-6">
-      <div className="text-red-600">
-        Before adding a receiver, make sure to download and install the required
-        driver.
-      </div>
+      {platform == "windows" && (
+        <div className="text-red-600">
+          Before adding a receiver, make sure to download and install the
+          required driver.
+        </div>
+      )}
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
           Remote Control Management
         </h1>
         <div className="flex flex-col gap-4">
-          <button
-            className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors duration-200 shadow-md"
-            disabled={downloading}
-            onClick={downloadHandler}
-          >
-            {downloading ? "Downloading...." : "Download the driver"}
-          </button>
+          {platform == "windows" && (
+            <button
+              className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors duration-200 shadow-md"
+              disabled={downloading}
+              onClick={downloadHandler}
+            >
+              {downloading ? "Downloading...." : "Download the driver"}
+            </button>
+          )}
           <Link href="/add-remote">
             <button
               onClick={() => dispatch(resetReceivers())}
