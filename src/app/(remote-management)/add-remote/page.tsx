@@ -167,9 +167,7 @@ const ScanConnector: React.FC = () => {
         } else {
           console.log("Transfer error:", result.status);
         }
-        // iteration++;
       }
-      throw new Error("Max iterations reached");
     } catch (error) {
       console.log("Error:", error);
       throw error;
@@ -186,7 +184,7 @@ const ScanConnector: React.FC = () => {
       }
       const usbNavigator = navigator as Navigator & NavigatorUSB;
       const device = await usbNavigator.usb.requestDevice({
-        filters: [{ vendorId: 0xb1b0, productId: 0x8055 }],
+        filters: [{ vendorId: 0xb1b0, productId: 0x5508 }],
       });
       await sendCommandAndListen(device);
     } catch (error) {

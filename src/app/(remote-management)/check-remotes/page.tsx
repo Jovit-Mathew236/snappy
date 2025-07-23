@@ -2,11 +2,12 @@
 import { useSelector, useDispatch } from "react-redux";
 import renderSvg from "@/svgImport";
 import renderImg from "@/imgImport";
-import React, { useState } from "react";
-// import init, { decrypt } from "snappy-remote";
+import React, { useEffect, useState } from "react";
+import init, { decrypt } from "snappy-remote";
 import Image from "next/image";
 import { safeSetCurrentReceiver } from "@/app/redux/feature/remoteSlice/remoteSlice";
-// import { getOS } from "@/utils/getPlatform";
+import { getOS } from "@/utils/getPlatform";
+
 
 interface Remote {
   remote_name: string;
@@ -39,11 +40,11 @@ interface RootState {
   };
 }
 
-// interface DeviceInfo {
-//   vendorId?: number;
-//   productId?: number;
-//   serialNumber?: string;
-// }
+interface DeviceInfo {
+  vendorId?: number;
+  productId?: number;
+  serialNumber?: string;
+}
 
 const Page: React.FC = () => {
   const dispatch = useDispatch();
@@ -52,148 +53,148 @@ const Page: React.FC = () => {
   );
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  // const [availableReceivers, setAvailableReceivers] = useState<string[]>([]);
-  // const platform = getOS();
-  // const [connectedDevice, setConnectedDevice] = useState<USBDevice | null>(
-  //   null
-  // );
+  const [availableReceivers, setAvailableReceivers] = useState<string[]>([]);
+  const platform = getOS();
+  const [connectedDevice, setConnectedDevice] = useState<USBDevice | null>(
+    null
+  );
 
-  // useEffect(() => {
-  //   async function initialize() {
-  //     await init();
-  //   }
-  //   initialize();
-  // }, []);
+  useEffect(() => {
+    async function initialize() {
+      await init();
+    }
+    initialize();
+  }, []);
 
-  // useEffect(() => {
-  //   return () => {
-  //     // Cleanup function that runs when component unmounts
-  //     if (connectedDevice) {
-  //       connectedDevice
-  //         .close()
-  //         .then(() => console.log("Device closed successfully"))
-  //         .catch((err) => console.error("Error closing device:", err));
-  //     }
-  //   };
-  // }, [connectedDevice]);
+  useEffect(() => {
+    return () => {
+      // Cleanup function that runs when component unmounts
+      if (connectedDevice) {
+        connectedDevice
+          .close()
+          .then(() => console.log("Device closed successfully"))
+          .catch((err) => console.error("Error closing device:", err));
+      }
+    };
+  }, [connectedDevice]);
 
-  // async function getAndOpenDevice() {
-  //   try {
-  //     const deviceInfo: DeviceInfo = JSON.parse(
-  //       localStorage.getItem("currentDeviceInfo") || "{}"
-  //     );
-  //     if (!deviceInfo.vendorId || !deviceInfo.productId) {
-  //       throw new Error("No device information found in localStorage.");
-  //     }
+  async function getAndOpenDevice() {
+    try {
+      const deviceInfo: DeviceInfo = JSON.parse(
+        localStorage.getItem("currentDeviceInfo") || "{}"
+      );
+      if (!deviceInfo.vendorId || !deviceInfo.productId) {
+        throw new Error("No device information found in localStorage.");
+      }
 
-  //     const devices = await navigator.usb.getDevices();
-  //     const device = devices.find(
-  //       (d: USBDevice) =>
-  //         d.vendorId === deviceInfo.vendorId &&
-  //         d.productId === deviceInfo.productId &&
-  //         (!deviceInfo.serialNumber ||
-  //           d.serialNumber === deviceInfo.serialNumber)
-  //     );
+      const devices = await navigator.usb.getDevices();
+      const device = devices.find(
+        (d: USBDevice) =>
+          d.vendorId === deviceInfo.vendorId &&
+          d.productId === deviceInfo.productId &&
+          (!deviceInfo.serialNumber ||
+            d.serialNumber === deviceInfo.serialNumber)
+      );
 
-  //     if (!device) {
-  //       throw new Error("Device not found or not authorized.");
-  //     }
+      if (!device) {
+        throw new Error("Device not found or not authorized.");
+      }
 
-  //     return device;
-  //   } catch (error: unknown) {
-  //     console.error("Error retrieving device:", error);
-  //     throw error instanceof Error ? error : new Error(String(error));
-  //   }
-  // }
+      return device;
+    } catch (error: unknown) {
+      console.error("Error retrieving device:", error);
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
 
-  // async function sendCommandAndListen() {
-  //   let device: USBDevice | undefined;
-  //   try {
-  //     device = await getAndOpenDevice();
+  async function sendCommandAndListen() {
+    let device: USBDevice | undefined;
+    try {
+      device = await getAndOpenDevice();
 
-  //     // await device.open();
-  //     // setConnectedDevice(device);
-  //     console.log("Device opened");
-  //     if (device.configuration === null) {
-  //       await device.selectConfiguration(1);
-  //     }
-  //     await device.claimInterface(1);
-  //     console.log("Interface claimed");
-  //     const command = new TextEncoder().encode("START\n");
-  //     const descriptorIndex = device.serialNumber ? 0 : 3;
-  //     const result = await device.controlTransferIn(
-  //       {
-  //         requestType: "standard",
-  //         recipient: "device",
-  //         request: 0x06,
-  //         value: (0x03 << 8) | descriptorIndex,
-  //         index: 0x0409,
-  //       },
-  //       255
-  //     );
-  //     if (!result.data) {
-  //       throw new Error("No data received from control transfer");
-  //     }
-  //     let serial_number: Uint8Array;
-  //     if (platform === "windows") {
-  //       const serialKey = new Uint8Array(result.data.buffer);
-  //       const serialArray: number[] = [];
-  //       for (let i = 2; i < serialKey.length; i += 2) {
-  //         serialArray.push(serialKey[i]);
-  //       }
-  //       serial_number = new Uint8Array(serialArray);
-  //     } else {
-  //       const serialNumber = device.serialNumber || "";
-  //       serial_number = new Uint8Array(
-  //         [...serialNumber].map((char) => char.charCodeAt(0))
-  //       );
-  //     }
-  //     await device.transferOut(2, command);
-  //     console.log("Command sent");
+      // await device.open();
+      // setConnectedDevice(device);
+      console.log("Device opened");
+      if (device.configuration === null) {
+        await device.selectConfiguration(1);
+      }
+      await device.claimInterface(1);
+      console.log("Interface claimed");
+      const command = new TextEncoder().encode("START\n");
+      const descriptorIndex = device.serialNumber ? 0 : 3;
+      const result = await device.controlTransferIn(
+        {
+          requestType: "standard",
+          recipient: "device",
+          request: 0x06,
+          value: (0x03 << 8) | descriptorIndex,
+          index: 0x0409,
+        },
+        255
+      );
+      if (!result.data) {
+        throw new Error("No data received from control transfer");
+      }
+      let serial_number: Uint8Array;
+      if (platform === "windows") {
+        const serialKey = new Uint8Array(result.data.buffer);
+        const serialArray: number[] = [];
+        for (let i = 2; i < serialKey.length; i += 2) {
+          serialArray.push(serialKey[i]);
+        }
+        serial_number = new Uint8Array(serialArray);
+      } else {
+        const serialNumber = device.serialNumber || "";
+        serial_number = new Uint8Array(
+          [...serialNumber].map((char) => char.charCodeAt(0))
+        );
+      }
+      await device.transferOut(2, command);
+      console.log("Command sent");
 
-  //     // const maxIterations = 1000;
-  //     let iteration = 0;
-  //     while (true) {
-  //       const result = await device.transferIn(2, 64);
-  //       console.log("Received data:", result);
-  //       if (result.status === "ok" && result.data) {
-  //         const int8Array = new Uint8Array(result.data.buffer);
-  //         if (int8Array.length === 17) {
-  //           const data = new Uint8Array([...int8Array.slice(0, 17)]);
-  //           const answer = decrypt(serial_number, data);
-  //           console.log("Decrypted answer:", answer);
-  //           if (typeof answer === "string" && answer.trim().startsWith("{")) {
-  //             try {
-  //               const jsonData = JSON.parse(answer);
-  //               console.log("Parsed JSON:", jsonData);
-  //               if (jsonData?.MAC) {
-  //                 setAvailableReceivers((prev) => {
-  //                   if (!prev.includes(jsonData.MAC)) {
-  //                     return [...prev, jsonData.MAC];
-  //                   }
-  //                   return prev;
-  //                 });
-  //               }
-  //             } catch (parseError) {
-  //               console.error("JSON parse error:", parseError);
-  //             }
-  //           }
-  //         }
-  //       } else {
-  //         console.log("Transfer error:", result.status);
-  //       }
-  //       iteration++;
-  //     }
-  //     throw new Error("Max iterations reached");
-  //   } catch (error: unknown) {
-  //     console.error("Error in sendCommandAndListen:", error);
-  //     setError(
-  //       error instanceof Error
-  //         ? error.message
-  //         : "Failed to communicate with USB device"
-  //     );
-  //   }
-  // }
+      // const maxIterations = 1000;
+      let iteration = 0;
+      while (true) {
+        const result = await device.transferIn(2, 64);
+        console.log("Received data:", result);
+        if (result.status === "ok" && result.data) {
+          const int8Array = new Uint8Array(result.data.buffer);
+          if (int8Array.length === 17) {
+            const data = new Uint8Array([...int8Array.slice(0, 17)]);
+            const answer = decrypt(serial_number, data);
+            console.log("Decrypted answer:", answer);
+            if (typeof answer === "string" && answer.trim().startsWith("{")) {
+              try {
+                const jsonData = JSON.parse(answer);
+                console.log("Parsed JSON:", jsonData);
+                if (jsonData?.MAC) {
+                  setAvailableReceivers((prev) => {
+                    if (!prev.includes(jsonData.MAC)) {
+                      return [...prev, jsonData.MAC];
+                    }
+                    return prev;
+                  });
+                }
+              } catch (parseError) {
+                console.error("JSON parse error:", parseError);
+              }
+            }
+          }
+        } else {
+          console.log("Transfer error:", result.status);
+        }
+        iteration++;
+      }
+      throw new Error("Max iterations reached");
+    } catch (error: unknown) {
+      console.error("Error in sendCommandAndListen:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to communicate with USB device"
+      );
+    }
+  }
 
   const handleReceiverSelect = (receiverID: string) => {
     setIsLoading(true);

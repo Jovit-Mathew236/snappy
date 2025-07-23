@@ -1,9 +1,7 @@
 function getOS() {
-  // Check if running in a browser environment
   if (typeof window === "undefined") {
-    return "Unknown"; // Fallback for non-browser environments
+    return "Unknown";
   }
-
   const userAgent = window.navigator.userAgent;
   const platform = window.navigator.platform;
   const macosPlatforms = ["Macintosh", "MacIntel", "MacPPC", "Mac68K"];
