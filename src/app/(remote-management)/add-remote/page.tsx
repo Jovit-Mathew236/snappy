@@ -184,7 +184,10 @@ const ScanConnector: React.FC = () => {
       }
       const usbNavigator = navigator as Navigator & NavigatorUSB;
       const device = await usbNavigator.usb.requestDevice({
-        filters: [{ vendorId: 0xb1b0, productId: 0x5508 }],
+        filters: [
+          { vendorId: 0xb1b0, productId: 0x5508 },
+          { vendorId: 0xb1b0, productId: 0x8055 },
+        ],
       });
       await sendCommandAndListen(device);
     } catch (error) {
