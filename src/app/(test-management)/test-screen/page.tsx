@@ -132,7 +132,7 @@ export default function TestScreen() {
   useEffect(() => {
     const handleDisconnect = (event: USBDeviceEvent) => {
       setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue.");
+      setError("USB device disconnected. Please reconnect to continue." + event.device.serialNumber);
       usbListeningRef.current = false;
       deviceRef.current = null;
     };
@@ -354,11 +354,11 @@ export default function TestScreen() {
     if (!document.fullscreenElement) {
       setIsFullscreen(true);
       document.documentElement.requestFullscreen().catch((err) => {
-        setFullscreenError("Failed to enter fullscreen. Please try again.");
+        setFullscreenError("Failed to enter fullscreen. Please try again." + err);
       });
     } else {
       document.exitFullscreen().catch((err) => {
-        setFullscreenError("Failed to exit fullscreen. Please try again.");
+        setFullscreenError("Failed to exit fullscreen. Please try again." + err);
       });
       setIsFullscreen(false);
     }
