@@ -122,10 +122,8 @@ export default function TestScreen() {
     async function initialize() {
       try {
         await init();
-        console.log("Initialization completed");
       } catch (initError) {
         console.error("Initialization error:", initError);
-        setError("Failed to initialize WebUSB");
       }
     }
     initialize();
@@ -133,9 +131,8 @@ export default function TestScreen() {
 
   useEffect(() => {
     const handleDisconnect = (event: USBDeviceEvent) => {
-      console.log("USB device disconnected:", event.device);
       setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue.");
+      setError("USB device disconnected. Please reconnect to continue." + event.device.serialNumber);
       usbListeningRef.current = false;
       deviceRef.current = null;
     };
@@ -150,20 +147,12 @@ export default function TestScreen() {
       const deviceInfo = JSON.parse(
         localStorage.getItem("currentDeviceInfo") || "{}"
       );
-      console.log("Device info from localStorage:", deviceInfo);
       if (!deviceInfo.vendorId || !deviceInfo.productId) {
         throw new Error("No device information found in localStorage.");
       }
 
       const devices = await navigator.usb.getDevices();
-      console.log(
-        "Available devices:",
-        devices.map((d) => ({
-          vendorId: d.vendorId,
-          productId: d.productId,
-          serialNumber: d.serialNumber,
-        }))
-      );
+
       const device = devices.find(
         (d) =>
           d.vendorId === deviceInfo.vendorId &&
@@ -178,16 +167,13 @@ export default function TestScreen() {
 
       if (!device.opened) {
         await device.open();
-        console.log("Device opened");
       }
 
       if (device.configuration === null) {
         await device.selectConfiguration(1);
-        console.log("Configuration selected");
       }
 
       await device.claimInterface(1);
-      console.log("Interface claimed");
 
       return device;
     } catch (error: unknown) {
@@ -198,7 +184,6 @@ export default function TestScreen() {
 
   async function connectToUSBDevice() {
     if (usbConnected && usbListeningRef.current) {
-      console.log("USB device already connected and listening");
       return;
     }
 
@@ -245,7 +230,6 @@ export default function TestScreen() {
           [...serialNumber].map((char) => char.charCodeAt(0))
         );
       }
-      console.log("Serial number:", Array.from(serial_number));
 
       await deviceRef.current.transferOut(2, command);
 
@@ -294,12 +278,6 @@ export default function TestScreen() {
                           student_remote_response: selectedOption?.option_id || `option_${jsonData.value}`,
                           timestamp: Date.now(),
                         };
-
-                        console.log(
-                          `Button ${jsonData.value} pressed -> Option ${buttonIndex} -> ${selectedOption?.option_id} (${selectedOption?.option_text})`,
-                          newResponse
-                        );
-
                         setResponses((prev) => {
                           const existingQuestion = prev.find(
                             (q) => q.question_id === currentQuestionId
@@ -365,7 +343,6 @@ export default function TestScreen() {
       if (deviceRef.current && deviceRef.current.opened) {
         try {
           await deviceRef.current.close();
-          console.log("Device closed");
         } catch (closeError) {
           console.error("Error closing device:", closeError);
         }
@@ -377,12 +354,11 @@ export default function TestScreen() {
     if (!document.fullscreenElement) {
       setIsFullscreen(true);
       document.documentElement.requestFullscreen().catch((err) => {
-        console.log("Error entering fullscreen:", err);
-        setFullscreenError("Failed to enter fullscreen. Please try again.");
+        setFullscreenError("Failed to enter fullscreen. Please try again." + err);
       });
     } else {
       document.exitFullscreen().catch((err) => {
-        console.log("Error exiting fullscreen:", err);
+        setFullscreenError("Failed to exit fullscreen. Please try again." + err);
       });
       setIsFullscreen(false);
     }
@@ -404,8 +380,6 @@ export default function TestScreen() {
 
   const handleSubmit = () => {
     if (!testData) return;
-
-    console.log("All Remote Responses:", responses);
 
     // Create detailed answer mapping for each student
     const answerMappings: {
@@ -456,19 +430,6 @@ export default function TestScreen() {
 
         const isCorrect = selectedOption ? selectedOption.isCorrect : false;
 
-        console.log(`=== Question ${question.question_id} Analysis for ${remote.student_remote_name} ===`);
-        console.log(`Question: "${question.question_text}"`);
-        console.log(`Student response ID: "${studentResponse?.student_remote_response}"`);
-        console.log(`Selected option:`, selectedOption);
-        console.log(`Is selected option correct?`, selectedOption?.isCorrect);
-        console.log(`Final isCorrect value:`, isCorrect);
-        console.log(`All options for this question:`, question.options.map(opt => ({
-          id: opt.option_id,
-          text: opt.option_text,
-          isCorrect: opt.isCorrect
-        })));
-        console.log(`==========================================`);
-
         answerMappings[remote.student_remote_id].answers.push({
           question_id: question.question_id,
           question_text: question.question_text,
@@ -482,8 +443,6 @@ export default function TestScreen() {
       });
     });
 
-    console.log("Detailed Answer Mappings:", answerMappings);
-
     // Calculate progress based on answer mappings
     const simulatedProgress = allRemotes.map((remote) => {
       const studentAnswers = answerMappings[remote.student_remote_id].answers;
@@ -492,15 +451,6 @@ export default function TestScreen() {
       const incorrectAnswered = studentAnswers.filter(answer => answer.selected_option_id !== null && !answer.is_correct).length;
       const unansweredQuestions = testData.questions.length - answeredQuestions;
       const totalIncorrect = incorrectAnswered + unansweredQuestions;
-
-      console.log(`Student ${remote.student_remote_name}:`, {
-        correctAnswers,
-        incorrectAnswered,
-        unansweredQuestions,
-        totalIncorrect,
-        answeredQuestions,
-        totalQuestions: testData.questions.length
-      });
 
       return {
         student_remote_id: remote.student_remote_id,
@@ -523,13 +473,11 @@ export default function TestScreen() {
       responses.find((r) => r.question_id === question.question_id)
         ?.responses || [];
 
-    // Only show remotes section if there are actually remotes connected
-    const hasRemotes = allRemotes.length > 0;
-    const gridCols = Math.min(Math.max(allRemotes.length, 1), 4); // Limit to max 4 columns
+    const gridCols = Math.min(Math.max(allRemotes.length, 4), 8);
 
     if (phase === "collecting") {
       return (
-        <div className="w-full bg-gray-100">
+        <div className="w-full h-full bg-white">
           <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
             {question.question_text}
           </h3>
@@ -547,89 +495,76 @@ export default function TestScreen() {
             ))}
           </div>
 
-          {hasRemotes && (
-            <div className="mt-8 rounded-lg">
-              <div className="text-lg font-tthoves p-4 text-[#4A4A4F] w-full rounded-lg bg-blue-100">
-                Collecting responses... ({timeLeft}s)
-                <div className={`mt-4 grid gap-3 ${
-                  gridCols === 1 ? 'grid-cols-1' :
-                  gridCols === 2 ? 'grid-cols-2' :
-                  gridCols === 3 ? 'grid-cols-3' :
-                  'grid-cols-4'
-                }`}>
-                  {allRemotes.map((remote, index) => {
-                    const matchingResponse = currentResponses.find(
-                      (response) =>
-                        response.student_remote_id === remote.student_remote_id
-                    );
-                    const isMatchingId = !!matchingResponse;
-                    return (
-                      <div
-                        key={index}
-                        className={`${
-                          isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
-                        } flex items-center gap-3`}
-                      >
-                        <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white w-full">
-                          <span className="flex-1">Student: {remote.student_remote_name || "Unknown"}</span>
-                          {isMatchingId ? (
-                            <button
-                              type="button"
-                              className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
-                            >
-                              ✓
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
-                            >
-                              ✗
-                            </button>
-                          )}
-                        </div>
+          <div className="mt-4 rounded-lg">
+            <div className="text-lg font-tthoves p-4 text-[#4A4A4F] w-full rounded-lg bg-blue-100">
+              Collecting responses... ({timeLeft}s)
+              <ul className={`list-disc pl-5 grid grid-cols-${gridCols} mt-4`}>
+                {allRemotes.map((remote, index) => {
+                  const matchingResponse = currentResponses.find(
+                    (response) =>
+                      response.student_remote_id === remote.student_remote_id
+                  );
+                  const isMatchingId = !!matchingResponse;
+                  return (
+                    <li
+                      key={index}
+                      className={`${
+                        isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
+                      } flex items-center gap-3`}
+                    >
+                      <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
+                        Student: {remote.student_remote_name || "Unknown"},
+                        {isMatchingId ? (
+                          <button
+                            type="button"
+                            className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
+                          >
+                            ✓
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
+                          >
+                            ✗
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-          )}
+          </div>
         </div>
       );
     }
     return (
-      <div className="w-full bg-white">
-        <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
-          {question.question_text}
-        </h3>
-        <div className="space-y-3 mb-8">
-          {question.options.map((option, index) => (
-            <div
-              key={option.option_id}
-              className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
-            >
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
-                {String.fromCharCode(65 + index)}
+      <div className="w-full h-full relative bg-white">
+        <div className="w-full">
+          <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
+            {question.question_text}
+          </h3>
+          <div className="space-y-3 mb-8">
+            {question.options.map((option, index) => (
+              <div
+                key={option.option_id}
+                className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
+              >
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
+                  {String.fromCharCode(65 + index)}
+                </div>
+                <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
               </div>
-              <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
-            </div>
-          ))}
-        </div>
-        
-        {hasRemotes && (
+            ))}
+          </div>
           <div className="w-full rounded-lg">
             {currentResponses.length > 0 ? (
               <div className="mt-4 p-4 bg-gray-100 rounded-lg">
                 <h4 className="text-lg font-tthoves text-[#4A4A4F]">
                   Responses for Question {currentQuestionIndex + 1}:
                 </h4>
-                <div className={`mt-4 grid gap-3 ${
-                  gridCols === 1 ? 'grid-cols-1' :
-                  gridCols === 2 ? 'grid-cols-2' :
-                  gridCols === 3 ? 'grid-cols-3' :
-                  'grid-cols-4'
-                }`}>
+                <ul className={`list-disc pl-5 grid grid-cols-${gridCols} mt-4`}>
                   {allRemotes.map((remote, index) => {
                     const matchingResponse = currentResponses.find(
                       (response) =>
@@ -637,34 +572,34 @@ export default function TestScreen() {
                     );
                     const isMatchingId = !!matchingResponse;
                     return (
-                      <div
+                      <li
                         key={index}
                         className={`${
                           isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
                         } flex items-center gap-3`}
                       >
-                        <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white w-full">
-                          <span className="flex-1">Student: {remote.student_remote_name || "Unknown"}</span>
+                        <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
+                          Student: {remote.student_remote_name || "Unknown"},
                           {isMatchingId ? (
                             <button
                               type="button"
-                              className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
+                              className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
                             >
                               ✓
                             </button>
                           ) : (
                             <button
                               type="button"
-                              className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
+                              className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
                             >
                               ✗
                             </button>
                           )}
                         </div>
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               </div>
             ) : (
               <div className="mt-4 p-4 bg-gray-100 rounded-lg">
@@ -674,7 +609,7 @@ export default function TestScreen() {
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -694,7 +629,6 @@ export default function TestScreen() {
         student_remote_name: remote.remote_name,
       }));
       setAllRemotes(transformedRemotes);
-      console.log("Filtered remotes (excluding teacher remote):", transformedRemotes);
     } else {
       setAllRemotes([]);
     }
@@ -797,7 +731,7 @@ export default function TestScreen() {
   const currentQuestion = testData.questions[currentQuestionIndex];
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-gray-100">
+    <div className="h-full w-full flex flex-col items-center justify-center p-4 bg-white">
       {showCompletionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-xl shadow-2xl max-w-4xl w-full">
@@ -905,7 +839,7 @@ export default function TestScreen() {
           </div>
         </div>
       )}
-      <div className="flex-1 w-full max-w-6xl mx-auto p-6">
+      <div className="w-full p-6 rounded-lg mb-20">
         <div className="mb-4 flex justify-between items-center">
           <div className="text-[#4A1FCC] font-tthoves-semiBold text-2xl">
             Question {currentQuestionIndex + 1}
@@ -926,7 +860,7 @@ export default function TestScreen() {
           </div>
         </div>
         <div className="w-full h-[1px] bg-[#E3E3E4] my-3" />
-        <div className="flex-1">{renderQuestion(currentQuestion)}</div>
+        <div className="h-full">{renderQuestion(currentQuestion)}</div>
       </div>
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex justify-between items-center">
         <button
