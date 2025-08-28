@@ -271,7 +271,7 @@ const Page: React.FC = () => {
      )}
      <a
        href="/test-screen"
-       className="text-md text-[#0A0A0A] font-tthoves-semiBold mb-2 p-4 bg-red-300 z-50"
+       className="text-md text-white font-tthoves-semiBold mb-2 p-4 bg-[#5423E6] z-50 rounded-xl"
      >
        Start test
      </a>
