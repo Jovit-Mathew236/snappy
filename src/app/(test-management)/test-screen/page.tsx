@@ -24,6 +24,7 @@ interface Question {
   format: "mcq" | "code" | "descriptive";
   answer_text: string | null;
   options: Option[];
+  images?: string[]; // Add optional images field
 }
 interface TestData {
   test_id: string;
@@ -468,6 +469,73 @@ export default function TestScreen() {
     setProgress(simulatedProgress);
   };
 
+  const handleSkipToDashboard = () => {
+    handleSubmit();
+    navigateToDashboard();
+  };
+
+  const calculateQuestionStats = () => {
+    if (!testData) return [];
+
+    return testData.questions.map((question) => {
+      const questionResponse = responses.find(
+        (qr) => qr.question_id === question.question_id
+      );
+
+      const totalResponses = questionResponse ? questionResponse.responses.length : 0;
+      //const correctOption = question.options.find(opt => opt.isCorrect);
+      
+      let correctResponses = 0;
+      const optionStats = question.options.map(option => {
+        const responseCount = questionResponse 
+          ? questionResponse.responses.filter(
+              r => r.student_remote_response === option.option_id
+            ).length 
+          : 0;
+        
+        if (option.isCorrect) {
+          correctResponses = responseCount;
+        }
+
+        return {
+          option_id: option.option_id,
+          option_text: option.option_text,
+          response_count: responseCount,
+          percentage: totalResponses > 0 ? (responseCount / totalResponses) * 100 : 0,
+          is_correct: option.isCorrect
+        };
+      });
+
+      return {
+        question_id: question.question_id,
+        question_text: question.question_text,
+        total_responses: totalResponses,
+        correct_responses: correctResponses,
+        percentage_correct: totalResponses > 0 ? (correctResponses / totalResponses) * 100 : 0,
+        options: optionStats
+      };
+    });
+  };
+
+  const navigateToDashboard = () => {
+    const questionStats = calculateQuestionStats();
+    const totalScore = progress.reduce((sum, student) => sum + (student.score_obtained / student.max_score) * 100, 0);
+    const averageScore = progress.length > 0 ? totalScore / progress.length : 0;
+
+    const dashboardData = {
+      test_title: testData?.title || "Test Results",
+      total_students: allRemotes.length,
+      total_questions: testData?.questions.length || 0,
+      average_score: averageScore,
+      question_stats: questionStats,
+      student_results: progress
+    };
+
+    // Save to localStorage for the dashboard to access
+    localStorage.setItem("testResults", JSON.stringify(dashboardData));
+    router.push("/results-dashboard");
+  };
+
   const renderQuestion = (question: Question) => {
     const currentResponses =
       responses.find((r) => r.question_id === question.question_id)
@@ -494,6 +562,30 @@ export default function TestScreen() {
               </div>
             ))}
           </div>
+
+          {/* Question Images - Display after options */}
+          {question.images && question.images.length > 0 && (
+            <div className="mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {question.images.map((imageName, index) => (
+                  <div key={index} className="flex flex-col items-center">
+                    <img
+                      src={`/assets/questions/${imageName}`}
+                      alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                      className="w-full max-w-[200px] rounded-lg border border-gray-300 shadow-sm"
+                      onError={(e) => {
+                        console.error(`Failed to load image: ${imageName}`);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                    <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                      Option {String.fromCharCode(65 + index)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 rounded-lg">
             <div className="text-lg font-tthoves p-4 text-[#4A4A4F] w-full rounded-lg bg-blue-100">
@@ -558,6 +650,28 @@ export default function TestScreen() {
               </div>
             ))}
           </div>
+          {question.images && question.images.length > 0 && (
+            <div className="mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {question.images.map((imageName, index) => (
+                  <div key={index} className="flex flex-col items-center">
+                    <img
+                      src={`/assets/questions/${imageName}`}
+                      alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                      className="justify-center rounded-lg border border-gray-300 shadow-sm"
+                      onError={(e) => {
+                        console.error(`Failed to load image: ${imageName}`);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                    <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                      Option {String.fromCharCode(65 + index)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="w-full rounded-lg">
             {currentResponses.length > 0 ? (
               <div className="mt-4 p-4 bg-gray-100 rounded-lg">
@@ -828,13 +942,22 @@ export default function TestScreen() {
                 You have completed the test. Click below to return to the
                 dashboard.
               </p>
-              <button
-                type="button"
-                onClick={() => router.push("/")}
-                className="bg-[#5423E6] text-white px-8 py-3 rounded-lg font-tthoves hover:bg-[#4A1FCC] transition-colors"
-              >
-                Back to Dashboard
-              </button>
+              <div className="flex justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={navigateToDashboard}
+                  className="bg-[#5423E6] text-white px-8 py-3 rounded-lg font-tthoves hover:bg-[#4A1FCC] transition-colors"
+                >
+                  View Results Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className="bg-gray-500 text-white px-8 py-3 rounded-lg font-tthoves hover:bg-gray-600 transition-colors"
+                >
+                  Back to Home
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -842,7 +965,7 @@ export default function TestScreen() {
       <div className="w-full p-6 rounded-lg mb-20">
         <div className="mb-4 flex justify-between items-center">
           <div className="text-[#4A1FCC] font-tthoves-semiBold text-2xl">
-            Question {currentQuestionIndex + 1}
+            Question {currentQuestionIndex + 1} of {testData.questions.length}
           </div>
           <div className="flex items-center gap-4">
             {phase === "collecting" && (
@@ -850,6 +973,14 @@ export default function TestScreen() {
                 Time Left: {timeLeft}s
               </div>
             )}
+            {/* Skip to Dashboard Button */}
+            <button
+              type="button"
+              onClick={handleSkipToDashboard}
+              className="bg-orange-500 text-white px-4 py-2 rounded-lg font-tthoves hover:bg-orange-600 transition-colors text-sm"
+            >
+              Skip to Dashboard
+            </button>
             <button
               type="button"
               onClick={handleFullscreenToggle}
@@ -877,7 +1008,15 @@ export default function TestScreen() {
             className="ml-2"
           />
         </button>
-        <div className="mt-4">
+        <div className="flex items-center gap-4">
+          {/* Additional Skip to Dashboard button in the bottom bar */}
+          <button
+            type="button"
+            onClick={handleSkipToDashboard}
+            className="bg-orange-500 text-white px-6 py-2 rounded-lg font-tthoves hover:bg-orange-600 transition-colors"
+          >
+            Skip to Dashboard
+          </button>
           <button
             type="button"
             onClick={handleNext}
