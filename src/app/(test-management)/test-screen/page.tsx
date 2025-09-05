@@ -380,7 +380,77 @@ export default function TestScreen() {
   };
 
   const handleSubmit = () => {
-    if (!testData) return;
+    console.log('handleSubmit called'); // Debug log
+    const calculatedProgress = calculateProgressDirectly();
+    setProgress(calculatedProgress);
+  };
+
+  const handleSkipToDashboard = async () => {
+    console.log('Skip to dashboard called'); // Debug log
+    
+    // Calculate progress directly here instead of relying on state
+    const calculatedProgress = calculateProgressDirectly();
+    console.log('Directly calculated progress:', calculatedProgress); // Debug log
+    
+    // Update state
+    setProgress(calculatedProgress);
+    
+    // Navigate with the calculated data directly
+    navigateToDashboardWithData(calculatedProgress);
+  };
+
+  const navigateToDashboardWithData = (calculatedProgress: any[]) => {
+    console.log('Navigate to dashboard with data called'); // Debug log
+    console.log('Using calculated progress:', calculatedProgress); // Debug log
+    
+    const questionStats = calculateQuestionStats();
+    
+    // Fix average score calculation using the calculated progress
+    let averageScore = 0;
+    if (calculatedProgress.length > 0) {
+      const studentsWithResponses = calculatedProgress.filter(student => student.answered_questions > 0);
+      if (studentsWithResponses.length > 0) {
+        const totalScore = studentsWithResponses.reduce((sum, student) => {
+          const studentPercentage = student.max_score > 0 
+            ? (student.score_obtained / student.max_score) * 100 
+            : 0;
+          return sum + studentPercentage;
+        }, 0);
+        averageScore = totalScore / studentsWithResponses.length;
+      }
+    }
+
+    // Calculate questions presented vs total questions
+    const questionsPresented = currentQuestionIndex + 1;
+    const totalQuestionsInTest = testData?.questions.length || 0;
+
+    const dashboardData = {
+      test_title: testData?.title || "Test Results",
+      total_students: allRemotes.length,
+      total_questions: totalQuestionsInTest, // Keep total questions for reference
+      questions_presented: questionsPresented, // Add new field for presented questions
+      average_score: averageScore,
+      question_stats: questionStats,
+      student_results: calculatedProgress, // Use calculated progress directly
+      is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
+    };
+
+    console.log('Dashboard data being saved:', dashboardData); // Debug log
+    console.log('Student results length:', dashboardData.student_results.length); // Debug log
+
+    // Save to localStorage for the dashboard to access
+    localStorage.setItem("testResults", JSON.stringify(dashboardData));
+    router.push("/results-dashboard");
+  };
+
+  const calculateProgressDirectly = () => {
+    if (!testData) return [];
+
+    console.log('Calculating progress directly'); // Debug log
+    console.log('Current responses:', responses); // Debug log
+    console.log('All remotes:', allRemotes); // Debug log
+    console.log('Current question index:', currentQuestionIndex); // Debug log
 
     // Create detailed answer mapping for each student
     const answerMappings: {
@@ -406,84 +476,93 @@ export default function TestScreen() {
         answers: [],
       };
 
-      // Process each question
-      testData.questions.forEach((question) => {
+      // Process each question up to current question when skipping
+      testData.questions.forEach((question, questionIndex) => {
         const correctOption = question.options.find(opt => opt.isCorrect);
-        const questionResponse = responses.find(
-          (qr) => qr.question_id === question.question_id
-        );
         
-        // Get the latest response for this student and question (based on timestamp)
-        let studentResponse = null;
-        if (questionResponse) {
-          const studentResponses = questionResponse.responses.filter(
-            (r) => r.student_remote_id === remote.student_remote_id
+        // Only process questions that have been presented (up to current question index)
+        const questionHasBeenPresented = questionIndex <= currentQuestionIndex;
+        
+        if (questionHasBeenPresented) {
+          const questionResponse = responses.find(
+            (qr) => qr.question_id === question.question_id
           );
-          if (studentResponses.length > 0) {
-            // Sort by timestamp and take the latest one
-            studentResponse = studentResponses.sort((a, b) => b.timestamp - a.timestamp)[0];
+          
+          // Get the latest response for this student and question (based on timestamp)
+          let studentResponse = null;
+          if (questionResponse) {
+            const studentResponses = questionResponse.responses.filter(
+              (r) => r.student_remote_id === remote.student_remote_id
+            );
+            if (studentResponses.length > 0) {
+              // Sort by timestamp and take the latest one
+              studentResponse = studentResponses.sort((a, b) => b.timestamp - a.timestamp)[0];
+            }
           }
+
+          const selectedOption = studentResponse
+            ? question.options.find(opt => opt.option_id === studentResponse.student_remote_response)
+            : null;
+
+          const isCorrect = selectedOption ? selectedOption.isCorrect : false;
+
+          answerMappings[remote.student_remote_id].answers.push({
+            question_id: question.question_id,
+            question_text: question.question_text,
+            selected_option_id: selectedOption?.option_id || null,
+            selected_option_text: selectedOption?.option_text || null,
+            correct_option_id: correctOption?.option_id || "",
+            correct_option_text: correctOption?.option_text || "",
+            is_correct: isCorrect,
+            timestamp: studentResponse?.timestamp || null,
+          });
         }
-
-        const selectedOption = studentResponse
-          ? question.options.find(opt => opt.option_id === studentResponse.student_remote_response)
-          : null;
-
-        const isCorrect = selectedOption ? selectedOption.isCorrect : false;
-
-        answerMappings[remote.student_remote_id].answers.push({
-          question_id: question.question_id,
-          question_text: question.question_text,
-          selected_option_id: selectedOption?.option_id || null,
-          selected_option_text: selectedOption?.option_text || null,
-          correct_option_id: correctOption?.option_id || "",
-          correct_option_text: correctOption?.option_text || "",
-          is_correct: isCorrect,
-          timestamp: studentResponse?.timestamp || null,
-        });
       });
     });
 
     // Calculate progress based on answer mappings
-    const simulatedProgress = allRemotes.map((remote) => {
+    const calculatedProgress = allRemotes.map((remote) => {
       const studentAnswers = answerMappings[remote.student_remote_id].answers;
       const correctAnswers = studentAnswers.filter(answer => answer.is_correct).length;
       const answeredQuestions = studentAnswers.filter(answer => answer.selected_option_id !== null).length;
       const incorrectAnswered = studentAnswers.filter(answer => answer.selected_option_id !== null && !answer.is_correct).length;
-      const unansweredQuestions = testData.questions.length - answeredQuestions;
+      
+      // For partial tests, only count questions that were actually presented
+      const questionsPresented = currentQuestionIndex + 1; // +1 because index is 0-based
+      const unansweredQuestions = questionsPresented - answeredQuestions;
       const totalIncorrect = incorrectAnswered + unansweredQuestions;
 
       return {
         student_remote_id: remote.student_remote_id,
         student_remote_name: remote.student_remote_name,
-        score_obtained: correctAnswers * 10,
-        max_score: testData.questions.length * 10,
+        score_obtained: correctAnswers * 10, // 10 points per correct answer
+        max_score: questionsPresented * 10, // Only count questions that were presented
         correct_answers: correctAnswers,
         incorrect_answers: totalIncorrect,
-        total_questions: testData.questions.length,
+        total_questions: questionsPresented, // Update to reflect questions actually presented
         answered_questions: answeredQuestions,
         answer_details: studentAnswers,
       };
     });
 
-    setProgress(simulatedProgress);
-  };
-
-  const handleSkipToDashboard = () => {
-    handleSubmit();
-    navigateToDashboard();
+    console.log('Final calculated progress:', calculatedProgress); // Debug log
+    return calculatedProgress;
   };
 
   const calculateQuestionStats = () => {
     if (!testData) return [];
 
-    return testData.questions.map((question) => {
+    console.log('Calculating question stats for questions 0 to', currentQuestionIndex); // Debug log
+
+    // Only calculate stats for questions that have been presented
+    const questionsToAnalyze = testData.questions.slice(0, currentQuestionIndex + 1);
+
+    return questionsToAnalyze.map((question) => {
       const questionResponse = responses.find(
         (qr) => qr.question_id === question.question_id
       );
 
       const totalResponses = questionResponse ? questionResponse.responses.length : 0;
-      //const correctOption = question.options.find(opt => opt.isCorrect);
       
       let correctResponses = 0;
       const optionStats = question.options.map(option => {
@@ -518,135 +597,225 @@ export default function TestScreen() {
   };
 
   const navigateToDashboard = () => {
+    console.log('Navigate to dashboard called'); // Debug log
+    console.log('Current progress state:', progress); // Debug log
+    
     const questionStats = calculateQuestionStats();
-    const totalScore = progress.reduce((sum, student) => sum + (student.score_obtained / student.max_score) * 100, 0);
-    const averageScore = progress.length > 0 ? totalScore / progress.length : 0;
+    
+    // Fix average score calculation to handle cases with no progress data
+    let averageScore = 0;
+    if (progress.length > 0) {
+      const studentsWithResponses = progress.filter(student => student.answered_questions > 0);
+      if (studentsWithResponses.length > 0) {
+        const totalScore = studentsWithResponses.reduce((sum, student) => {
+          const studentPercentage = student.max_score > 0 
+            ? (student.score_obtained / student.max_score) * 100 
+            : 0;
+          return sum + studentPercentage;
+        }, 0);
+        averageScore = totalScore / studentsWithResponses.length;
+      }
+    }
+
+    // Calculate questions presented vs total questions
+    const questionsPresented = currentQuestionIndex + 1;
+    const totalQuestionsInTest = testData?.questions.length || 0;
 
     const dashboardData = {
       test_title: testData?.title || "Test Results",
       total_students: allRemotes.length,
-      total_questions: testData?.questions.length || 0,
+      total_questions: totalQuestionsInTest, // Keep total questions for reference
+      questions_presented: questionsPresented, // Add new field for presented questions
       average_score: averageScore,
       question_stats: questionStats,
-      student_results: progress
+      student_results: progress, // This should now contain actual student data
+      is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
     };
+
+    console.log('Dashboard data being saved:', dashboardData); // Debug log
 
     // Save to localStorage for the dashboard to access
     localStorage.setItem("testResults", JSON.stringify(dashboardData));
     router.push("/results-dashboard");
   };
 
+  // Updated renderQuestion function for src/app/(test-management)/test-screen/page.tsx
+  // This creates a two-column layout with questions on the left and student responses on the right
+
   const renderQuestion = (question: Question) => {
     const currentResponses =
       responses.find((r) => r.question_id === question.question_id)
         ?.responses || [];
 
-    const gridCols = Math.min(Math.max(allRemotes.length, 4), 8);
-
     if (phase === "collecting") {
       return (
-        <div className="w-full h-full bg-white">
-          <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
-            {question.question_text}
-          </h3>
-          <div className="space-y-3 mb-8">
-            {question.options.map((option, index) => (
-              <div
-                key={option.option_id}
-                className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
-              >
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
-                  {String.fromCharCode(65 + index)}
+        <div className="w-full h-full bg-white flex gap-6">
+          {/* Left Column - Question and Options */}
+          <div className="w-7/10 flex-shrink-0">
+            <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
+              {question.question_text}
+            </h3>
+            
+            {/* Question Options */}
+            <div className="space-y-3 mb-8">
+              {question.options.map((option, index) => (
+                <div
+                  key={option.option_id}
+                  className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
+                    {String.fromCharCode(65 + index)}
+                  </div>
+                  <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
                 </div>
-                <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
+              ))}
+            </div>
+
+            {/* Question Images - Display after options */}
+            {question.images && question.images.length > 0 && (
+              <div className="mb-8">
+                {(() => {
+                  const gridColsClass = {
+                    1: "grid-cols-1",
+                    2: "grid-cols-2",
+                    3: "grid-cols-3",
+                    4: "grid-cols-4",
+                    5: "grid-cols-5",
+                    6: "grid-cols-6",
+                  }[question.images.length] || "grid-cols-4"; // fallback
+
+                  return (
+                    <div className={`grid gap-4 ${gridColsClass}`}>
+                      {question.images.map((imageName, index) => (
+                        <div key={index} className="flex flex-col items-center">
+                          <img
+                            src={`/assets/questions/${imageName}`}
+                            alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                            className="rounded-lg border border-gray-300 shadow-sm"
+                            onError={(e) => {
+                              console.error(`Failed to load image: ${imageName}`);
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                          <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                            Option {String.fromCharCode(65 + index)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
-            ))}
+            )}
           </div>
 
-          {/* Question Images - Display after options */}
-          {question.images && question.images.length > 0 && (
-            <div className="mb-8">
-              {(() => {
-                const gridColsClass = {
-                  1: "grid-cols-1",
-                  2: "grid-cols-2",
-                  3: "grid-cols-3",
-                  4: "grid-cols-4",
-                  5: "grid-cols-5",
-                  6: "grid-cols-6",
-                }[question.images.length] || "grid-cols-4"; // fallback
+          {/* Right Column - Student Responses */}
+          <div className="w-3/10 flex-shrink-0">
+            <div className="bg-blue-100 rounded-lg p-6 h-full">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F]">
+                  Student Responses
+                </h4>
+                <div className="text-sm font-tthoves text-[#4A4A4F]">
+                  Time Left: {timeLeft}s
+                </div>
+              </div>
+              
+              {/* Response Status Summary */}
+              <div className="mb-4 p-3 bg-white rounded-lg">
+                <div className="text-sm font-tthoves text-[#4A4A4F] mb-2">
+                  Response Progress: {currentResponses.length}/{allRemotes.length} students responded
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(currentResponses.length / allRemotes.length) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
 
-                return (
-                  <div className={`grid gap-4 ${gridColsClass}`}>
-                    {question.images.map((imageName, index) => (
-                      <div key={index} className="flex flex-col items-center">
-                        <img
-                          src={`/assets/questions/${imageName}`}
-                          alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
-                          className="rounded-lg border border-gray-300 shadow-sm"
-                          onError={(e) => {
-                            console.error(`Failed to load image: ${imageName}`);
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                        <span className="text-sm text-gray-600 mt-2 font-tthoves">
-                          Option {String.fromCharCode(65 + index)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          <div className="mt-4 rounded-lg">
-            <div className="text-lg font-tthoves p-4 text-[#4A4A4F] w-full rounded-lg bg-blue-100">
-              Collecting responses... ({timeLeft}s)
-              <ul className={`list-disc pl-5 grid grid-cols-${gridCols} mt-4`}>
+              {/* Student Response List */}
+              <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
                 {allRemotes.map((remote, index) => {
                   const matchingResponse = currentResponses.find(
                     (response) =>
                       response.student_remote_id === remote.student_remote_id
                   );
-                  const isMatchingId = !!matchingResponse;
+                  const hasResponded = !!matchingResponse;
+                  
+                  // Get the selected option text if student responded
+                  const selectedOption = hasResponded 
+                    ? question.options.find(opt => opt.option_id === matchingResponse.student_remote_response)
+                    : null;
+
                   return (
-                    <li
+                    <div
                       key={index}
-                      className={`${
-                        isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
-                      } flex items-center gap-3`}
+                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-200 ${
+                        hasResponded 
+                          ? "bg-green-50 border-green-200" 
+                          : "bg-white border-gray-200"
+                      }`}
                     >
-                      <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
-                        Student: {remote.student_remote_name || "Unknown"},
-                        {isMatchingId ? (
-                          <button
-                            type="button"
-                            className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                          >
-                            ✓
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                          >
-                            ✗
-                          </button>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
+                          hasResponded ? "bg-green-500" : "bg-gray-400"
+                        }`}>
+                          {hasResponded ? "✓" : index + 1}
+                        </div>
+                        <div>
+                          <div className="font-tthoves text-[#4A4A4F] text-sm">
+                            {remote.student_remote_name || "Unknown"}
+                          </div>
+                          {hasResponded && selectedOption && (
+                            <div className="text-xs text-gray-600">
+                              Selected: {String.fromCharCode(65 + question.options.findIndex(opt => opt.option_id === selectedOption.option_id))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </li>
+                      
+                      <div className={`w-3 h-3 rounded-full ${
+                        hasResponded ? "bg-green-500" : "bg-gray-300"
+                      }`}></div>
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
+
+              {/* Response Statistics */}
+              <div className="mt-4 pt-4 border-t border-gray-300">
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-lg font-tthoves-bold text-green-600">
+                      {currentResponses.length}
+                    </div>
+                    <div className="text-xs font-tthoves text-gray-600">
+                      Responded
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-lg font-tthoves-bold text-gray-600">
+                      {allRemotes.length - currentResponses.length}
+                    </div>
+                    <div className="text-xs font-tthoves text-gray-600">
+                      Pending
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       );
     }
+
+    // Displaying phase (when showing results)
     return (
-      <div className="w-full h-full relative bg-white">
-        <div className="w-full">
+      <div className="w-full h-full bg-white flex gap-6">
+        {/* Left Column - Question and Options with Results */}
+        <div className="w-7/10 flex-shrink-0">
           <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
             {question.question_text}
           </h3>
@@ -673,7 +842,7 @@ export default function TestScreen() {
                   4: "grid-cols-4",
                   5: "grid-cols-5",
                   6: "grid-cols-6",
-                }[question.images.length] || "grid-cols-4"; // fallback
+                }[question.images.length] || "grid-cols-4";
 
                 return (
                   <div className={`grid gap-4 ${gridColsClass}`}>
@@ -698,56 +867,70 @@ export default function TestScreen() {
               })()}
             </div>
           )}
-          <div className="w-full rounded-lg">
-            {currentResponses.length > 0 ? (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <h4 className="text-lg font-tthoves text-[#4A4A4F]">
-                  Responses for Question {currentQuestionIndex + 1}:
-                </h4>
-                <ul className={`list-disc pl-5 grid grid-cols-${gridCols} mt-4`}>
-                  {allRemotes.map((remote, index) => {
-                    const matchingResponse = currentResponses.find(
-                      (response) =>
-                        response.student_remote_id === remote.student_remote_id
-                    );
-                    const isMatchingId = !!matchingResponse;
-                    return (
-                      <li
-                        key={index}
-                        className={`${
-                          isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
-                        } flex items-center gap-3`}
-                      >
-                        <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
-                          Student: {remote.student_remote_name || "Unknown"},
-                          {isMatchingId ? (
-                            <button
-                              type="button"
-                              className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                            >
-                              ✓
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                            >
-                              ✗
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+        </div>
+
+        {/* Right Column - Final Response Summary */}
+        <div className="w-3/10 flex-shrink-0">
+          <div className="bg-gray-100 rounded-lg p-6 h-full">
+            <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F] mb-4">
+              Response Summary
+            </h4>
+            
+            {/* Show response breakdown by option */}
+            <div className="space-y-3">
+              {question.options.map((option, index) => {
+                const optionResponses = currentResponses.filter(
+                  r => r.student_remote_response === option.option_id
+                );
+                const responseCount = optionResponses.length;
+                const percentage = currentResponses.length > 0 
+                  ? (responseCount / currentResponses.length) * 100 
+                  : 0;
+
+                return (
+                  <div key={option.option_id} className="bg-white rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-[#5423E6] text-white flex items-center justify-center text-sm font-semibold">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className="font-tthoves text-sm text-[#4A4A4F]">
+                          {option.option_text}
+                        </span>
+                        {option.isCorrect && (
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                            CORRECT
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-tthoves-semiBold text-[#4A4A4F]">
+                        {responseCount} ({Math.round(percentage)}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          option.isCorrect ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${Math.max(percentage, 2)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Total response count */}
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <div className="text-center bg-white rounded-lg p-3">
+                <div className="text-lg font-tthoves-bold text-[#4A4A4F]">
+                  {currentResponses.length}/{allRemotes.length}
+                </div>
+                <div className="text-sm font-tthoves text-gray-600">
+                  Total Responses
+                </div>
               </div>
-            ) : (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <p className="text-lg font-tthoves text-[#4A4A4F]">
-                  No responses received for this question.
-                </p>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
