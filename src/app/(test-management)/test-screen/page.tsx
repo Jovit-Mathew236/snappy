@@ -90,10 +90,8 @@ export default function TestScreen() {
   const [error, setError] = useState<string | null>(null);
   const [testData, setTestData] = useState<TestData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
   const [phase, setPhase] = useState<"collecting" | "displaying">("collecting");
-  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const [allRemotes, setAllRemotes] = useState<
     {
       student_remote_id: string;
@@ -371,20 +369,6 @@ export default function TestScreen() {
       }
     }
   }
-
-  const handleFullscreenToggle = () => {
-    if (!document.fullscreenElement) {
-      setIsFullscreen(true);
-      document.documentElement.requestFullscreen().catch((err) => {
-        setFullscreenError("Failed to enter fullscreen. Please try again." + err);
-      });
-    } else {
-      document.exitFullscreen().catch((err) => {
-        setFullscreenError("Failed to exit fullscreen. Please try again." + err);
-      });
-      setIsFullscreen(false);
-    }
-  };
 
   const handleNext = () => {
     if (!testData) return;
@@ -1002,18 +986,6 @@ export default function TestScreen() {
     return () => clearInterval(timer);
   }, [testData, usbConnected, phase, showCompletionModal]);
 
-  useEffect(() => {
-    if (!document.fullscreenElement && document.fullscreenEnabled) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.log("Error entering fullscreen on load:", err);
-        setFullscreenError(
-          "Could not enter fullscreen automatically. Please click the fullscreen button to continue."
-        );
-      });
-      setIsFullscreen(true);
-    }
-  }, []);
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1030,7 +1002,7 @@ export default function TestScreen() {
     );
   }
 
-  if (!usbConnected || !isFullscreen) {
+  if (!usbConnected) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow-lg text-center">
@@ -1041,7 +1013,7 @@ export default function TestScreen() {
             Please connect the USB device and enter fullscreen mode to start the
             test.
           </p>
-          {!usbConnected && isFullscreen && (
+          {!usbConnected && (
             <button
               type="button"
               onClick={connectToUSBDevice}
@@ -1049,20 +1021,6 @@ export default function TestScreen() {
             >
               Connect USB Device
             </button>
-          )}
-          {!isFullscreen && (
-            <button
-              type="button"
-              onClick={handleFullscreenToggle}
-              className="bg-[#5423E6] text-white px-6 py-2 rounded-lg"
-            >
-              {usbConnected
-                ? "To start test, Fullscreen mode is required."
-                : "Next"}
-            </button>
-          )}
-          {fullscreenError && !isFullscreen && (
-            <div className="mt-4 text-red-500">{fullscreenError}</div>
           )}
           {error && usbConnected && (
             <div className="mt-4 text-red-500">{error}</div>
@@ -1210,13 +1168,6 @@ export default function TestScreen() {
               className="bg-orange-500 text-white px-4 py-2 rounded-lg font-tthoves hover:bg-orange-600 transition-colors text-sm"
             >
               Skip to Dashboard
-            </button>
-            <button
-              type="button"
-              onClick={handleFullscreenToggle}
-              className="text-[#4A4A4F] font-tthoves text-lg"
-            >
-              {isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             </button>
           </div>
         </div>
