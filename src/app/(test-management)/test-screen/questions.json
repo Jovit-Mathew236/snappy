@@ -27,7 +27,7 @@
       "answer_text": null,
       "images": ["question_2.png"],
       "options": [
-        { "option_id": "q2_opt1", "option_text": "48 in²", "content": "", "isCorrect": true },
+        { "option_id": "q2_opt1", "option_text": "96 in²", "content": "", "isCorrect": true },
         { "option_id": "q2_opt2", "option_text": "42 in²", "content": "", "isCorrect": false },
         { "option_id": "q2_opt3", "option_text": "48 in", "content": "", "isCorrect": false },
         { "option_id": "q2_opt4", "option_text": "20 in²", "content": "", "isCorrect": false }

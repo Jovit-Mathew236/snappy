@@ -566,24 +566,37 @@ export default function TestScreen() {
           {/* Question Images - Display after options */}
           {question.images && question.images.length > 0 && (
             <div className="mb-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {question.images.map((imageName, index) => (
-                  <div key={index} className="flex flex-col items-center">
-                    <img
-                      src={`/assets/questions/${imageName}`}
-                      alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
-                      className="w-full max-w-[200px] rounded-lg border border-gray-300 shadow-sm"
-                      onError={(e) => {
-                        console.error(`Failed to load image: ${imageName}`);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <span className="text-sm text-gray-600 mt-2 font-tthoves">
-                      Option {String.fromCharCode(65 + index)}
-                    </span>
+              {(() => {
+                const gridColsClass = {
+                  1: "grid-cols-1",
+                  2: "grid-cols-2",
+                  3: "grid-cols-3",
+                  4: "grid-cols-4",
+                  5: "grid-cols-5",
+                  6: "grid-cols-6",
+                }[question.images.length] || "grid-cols-4"; // fallback
+
+                return (
+                  <div className={`grid gap-4 ${gridColsClass}`}>
+                    {question.images.map((imageName, index) => (
+                      <div key={index} className="flex flex-col items-center">
+                        <img
+                          src={`/assets/questions/${imageName}`}
+                          alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                          className="rounded-lg border border-gray-300 shadow-sm"
+                          onError={(e) => {
+                            console.error(`Failed to load image: ${imageName}`);
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                        <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                          Option {String.fromCharCode(65 + index)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           )}
 
@@ -652,24 +665,37 @@ export default function TestScreen() {
           </div>
           {question.images && question.images.length > 0 && (
             <div className="mb-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {question.images.map((imageName, index) => (
-                  <div key={index} className="flex flex-col items-center">
-                    <img
-                      src={`/assets/questions/${imageName}`}
-                      alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
-                      className="justify-center rounded-lg border border-gray-300 shadow-sm"
-                      onError={(e) => {
-                        console.error(`Failed to load image: ${imageName}`);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <span className="text-sm text-gray-600 mt-2 font-tthoves">
-                      Option {String.fromCharCode(65 + index)}
-                    </span>
+              {(() => {
+                const gridColsClass = {
+                  1: "grid-cols-1",
+                  2: "grid-cols-2",
+                  3: "grid-cols-3",
+                  4: "grid-cols-4",
+                  5: "grid-cols-5",
+                  6: "grid-cols-6",
+                }[question.images.length] || "grid-cols-4"; // fallback
+
+                return (
+                  <div className={`grid gap-4 ${gridColsClass}`}>
+                    {question.images.map((imageName, index) => (
+                      <div key={index} className="flex flex-col items-center">
+                        <img
+                          src={`/assets/questions/${imageName}`}
+                          alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                          className="rounded-lg border border-gray-300 shadow-sm"
+                          onError={(e) => {
+                            console.error(`Failed to load image: ${imageName}`);
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                        <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                          Option {String.fromCharCode(65 + index)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           )}
           <div className="w-full rounded-lg">
