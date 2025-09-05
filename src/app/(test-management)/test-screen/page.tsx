@@ -54,6 +54,27 @@ interface RootState {
   };
 }
 
+interface StudentProgress {
+  student_remote_id: string;
+  student_remote_name: string;
+  score_obtained: number;
+  max_score: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  total_questions: number;
+  answered_questions: number;
+  answer_details: {
+    question_id: string;
+    question_text: string;
+    selected_option_id: string | null;
+    selected_option_text: string | null;
+    correct_option_id: string;
+    correct_option_text: string;
+    is_correct: boolean;
+    timestamp: number | null;
+  }[];
+}
+
 const dummyTestData: TestData = questionsData as TestData;
 
 export default function TestScreen() {
@@ -399,7 +420,7 @@ export default function TestScreen() {
     navigateToDashboardWithData(calculatedProgress);
   };
 
-  const navigateToDashboardWithData = (calculatedProgress: any[]) => {
+  const navigateToDashboardWithData = (calculatedProgress: StudentProgress[]) => {
     console.log('Navigate to dashboard with data called'); // Debug log
     console.log('Using calculated progress:', calculatedProgress); // Debug log
     
