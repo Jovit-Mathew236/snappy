@@ -216,8 +216,10 @@ export default function Home() {
                 <span>Check Remotes & Test</span>
               </div>
             </button>
+          </Link>
+          <Link href="/test-remotes">
             <button className="w-full bg-[#5423E6] text-white font-tthoves-semiBold py-3 px-4 rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors duration-200 shadow-md">
-              Check Remotes and Take Test
+              Test Remotes
             </button>
           </Link>
         </div>
