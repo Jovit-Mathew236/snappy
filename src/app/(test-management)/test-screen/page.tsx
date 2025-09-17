@@ -6,6 +6,7 @@ import { useSelector } from "react-redux";
 import init, { decrypt } from "snappy-remote";
 import { useRouter } from "next/navigation";
 import { getOS } from "@/utils/getPlatform";
+import questionsData from "./questions.json";
 
 interface Option {
   option_id: string;
@@ -23,6 +24,7 @@ interface Question {
   format: "mcq" | "code" | "descriptive";
   answer_text: string | null;
   options: Option[];
+  images?: string[]; // Add optional images field
 }
 interface TestData {
   test_id: string;
@@ -35,6 +37,7 @@ interface TestData {
 interface RemoteResponse {
   student_remote_id: string;
   student_remote_response: string;
+  timestamp: number;
 }
 interface QuestionResponse {
   question_id: string;
@@ -51,114 +54,28 @@ interface RootState {
   };
 }
 
-const dummyTestData: TestData = {
-  test_id: "math_test_grade4_1",
-  title: "4th Grade Math Quiz",
-  points: 100,
-  test_type: "mcq",
-  order: 1,
-  questions: [
-    {
-      question_id: "q1",
-      question_text: "What is 24 + 38?",
-      content: "",
-      format: "mcq",
-      answer_text: null,
-      options: [
-        {
-          option_id: "q1_opt1",
-          option_text: "52",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q1_opt2",
-          option_text: "62",
-          content: "",
-          isCorrect: true,
-        },
-        {
-          option_id: "q1_opt3",
-          option_text: "58",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q1_opt4",
-          option_text: "64",
-          content: "",
-          isCorrect: false,
-        },
-      ],
-    },
-    {
-      question_id: "q2",
-      question_text: "What is 7 × 6?",
-      content: "",
-      format: "mcq",
-      answer_text: null,
-      options: [
-        {
-          option_id: "q2_opt1",
-          option_text: "36",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q2_opt2",
-          option_text: "48",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q2_opt3",
-          option_text: "42",
-          content: "",
-          isCorrect: true,
-        },
-        {
-          option_id: "q2_opt4",
-          option_text: "45",
-          content: "",
-          isCorrect: false,
-        },
-      ],
-    },
-    {
-      question_id: "q3",
-      question_text: "What is 54 ÷ 9?",
-      content: "",
-      format: "mcq",
-      answer_text: null,
-      options: [
-        {
-          option_id: "q3_opt1",
-          option_text: "5",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q3_opt2",
-          option_text: "6",
-          content: "",
-          isCorrect: true,
-        },
-        {
-          option_id: "q3_opt3",
-          option_text: "7",
-          content: "",
-          isCorrect: false,
-        },
-        {
-          option_id: "q3_opt4",
-          option_text: "8",
-          content: "",
-          isCorrect: false,
-        },
-      ],
-    },
-  ],
-};
+interface StudentProgress {
+  student_remote_id: string;
+  student_remote_name: string;
+  score_obtained: number;
+  max_score: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  total_questions: number;
+  answered_questions: number;
+  answer_details: {
+    question_id: string;
+    question_text: string;
+    selected_option_id: string | null;
+    selected_option_text: string | null;
+    correct_option_id: string;
+    correct_option_text: string;
+    is_correct: boolean;
+    timestamp: number | null;
+  }[];
+}
+
+const dummyTestData: TestData = questionsData as TestData;
 
 export default function TestScreen() {
   const { receivers, currentReceiver } = useSelector(
@@ -173,10 +90,8 @@ export default function TestScreen() {
   const [error, setError] = useState<string | null>(null);
   const [testData, setTestData] = useState<TestData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
   const [phase, setPhase] = useState<"collecting" | "displaying">("collecting");
-  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const [allRemotes, setAllRemotes] = useState<
     {
       student_remote_id: string;
@@ -197,8 +112,27 @@ export default function TestScreen() {
       student_remote_name: string;
       score_obtained: number;
       max_score: number;
+      correct_answers: number;
+      incorrect_answers: number;
+      total_questions: number;
+      answered_questions: number;
+      answer_details: {
+        question_id: string;
+        question_text: string;
+        selected_option_id: string | null;
+        selected_option_text: string | null;
+        correct_option_id: string;
+        correct_option_text: string;
+        is_correct: boolean;
+        timestamp: number | null;
+      }[];
     }[]
   >([]);
+
+  // Function to load questions from JSON file
+  const loadQuestionsFromJSON = (): TestData => {
+    return dummyTestData;
+  };
 
   useEffect(() => {
     currentQuestionIndexRef.current = currentQuestionIndex;
@@ -208,10 +142,8 @@ export default function TestScreen() {
     async function initialize() {
       try {
         await init();
-        console.log("Initialization completed");
       } catch (initError) {
         console.error("Initialization error:", initError);
-        setError("Failed to initialize WebUSB");
       }
     }
     initialize();
@@ -219,9 +151,8 @@ export default function TestScreen() {
 
   useEffect(() => {
     const handleDisconnect = (event: USBDeviceEvent) => {
-      console.log("USB device disconnected:", event.device);
       setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue.");
+      setError("USB device disconnected. Please reconnect to continue." + event.device.serialNumber);
       usbListeningRef.current = false;
       deviceRef.current = null;
     };
@@ -236,20 +167,12 @@ export default function TestScreen() {
       const deviceInfo = JSON.parse(
         localStorage.getItem("currentDeviceInfo") || "{}"
       );
-      console.log("Device info from localStorage:", deviceInfo);
       if (!deviceInfo.vendorId || !deviceInfo.productId) {
         throw new Error("No device information found in localStorage.");
       }
 
       const devices = await navigator.usb.getDevices();
-      console.log(
-        "Available devices:",
-        devices.map((d) => ({
-          vendorId: d.vendorId,
-          productId: d.productId,
-          serialNumber: d.serialNumber,
-        }))
-      );
+
       const device = devices.find(
         (d) =>
           d.vendorId === deviceInfo.vendorId &&
@@ -264,16 +187,13 @@ export default function TestScreen() {
 
       if (!device.opened) {
         await device.open();
-        console.log("Device opened");
       }
 
       if (device.configuration === null) {
         await device.selectConfiguration(1);
-        console.log("Configuration selected");
       }
 
       await device.claimInterface(1);
-      console.log("Interface claimed");
 
       return device;
     } catch (error: unknown) {
@@ -284,7 +204,6 @@ export default function TestScreen() {
 
   async function connectToUSBDevice() {
     if (usbConnected && usbListeningRef.current) {
-      console.log("USB device already connected and listening");
       return;
     }
 
@@ -331,7 +250,6 @@ export default function TestScreen() {
           [...serialNumber].map((char) => char.charCodeAt(0))
         );
       }
-      console.log("Serial number:", Array.from(serial_number));
 
       await deviceRef.current.transferOut(2, command);
 
@@ -371,38 +289,32 @@ export default function TestScreen() {
                       );
 
                       if (matchingRemote) {
+                        // Map button value (1,2,3,4) to option index (0,1,2,3) then to option_id
+                        const buttonIndex = jsonData.value - 1; // Convert 1,2,3,4 to 0,1,2,3
+                        const selectedOption = testData?.questions[currentIndex].options[buttonIndex];
+
                         const newResponse: RemoteResponse = {
                           student_remote_id: matchingRemote.student_remote_id,
-                          student_remote_response:
-                            testData?.questions[currentIndex].options[
-                              jsonData.value %
-                                testData?.questions[currentIndex].options.length
-                            ].option_id,
+                          student_remote_response: selectedOption?.option_id || `option_${jsonData.value}`,
+                          timestamp: Date.now(),
                         };
-
-                        console.log(
-                          `Saving response for question ${currentQuestionId}:`,
-                          newResponse
-                        );
-
                         setResponses((prev) => {
                           const existingQuestion = prev.find(
                             (q) => q.question_id === currentQuestionId
                           );
 
                           if (existingQuestion) {
+                            // Remove any existing response from this remote and add the new one
+                            const updatedResponses = existingQuestion.responses.filter(
+                              (r) => r.student_remote_id !== newResponse.student_remote_id
+                            );
+                            updatedResponses.push(newResponse);
+                            
                             return prev.map((q) =>
                               q.question_id === currentQuestionId
                                 ? {
                                     ...q,
-                                    responses: [
-                                      ...q.responses.filter(
-                                        (r) =>
-                                          r.student_remote_id !==
-                                          newResponse.student_remote_id
-                                      ),
-                                      newResponse,
-                                    ],
+                                    responses: updatedResponses,
                                   }
                                 : q
                             );
@@ -435,7 +347,6 @@ export default function TestScreen() {
               );
             }
           }
-          // await new Promise((resolve) => setTimeout(resolve, 0)); // 100ms delay
         } catch (loopError) {
           console.error("Error in USB listening loop:", loopError);
           setError("Error receiving USB data. Please reconnect the device.");
@@ -452,28 +363,12 @@ export default function TestScreen() {
       if (deviceRef.current && deviceRef.current.opened) {
         try {
           await deviceRef.current.close();
-          console.log("Device closed");
         } catch (closeError) {
           console.error("Error closing device:", closeError);
         }
       }
     }
   }
-
-  const handleFullscreenToggle = () => {
-    if (!document.fullscreenElement) {
-      setIsFullscreen(true);
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.log("Error entering fullscreen:", err);
-        setFullscreenError("Failed to enter fullscreen. Please try again.");
-      });
-    } else {
-      document.exitFullscreen().catch((err) => {
-        console.log("Error exiting fullscreen:", err);
-      });
-      setIsFullscreen(false);
-    }
-  };
 
   const handleNext = () => {
     if (!testData) return;
@@ -490,185 +385,573 @@ export default function TestScreen() {
   };
 
   const handleSubmit = () => {
-    if (!testData) return;
+    console.log('handleSubmit called'); // Debug log
+    const calculatedProgress = calculateProgressDirectly();
+    setProgress(calculatedProgress);
+  };
 
-    console.log("All Remote Responses:", responses);
+  const handleSkipToDashboard = async () => {
+    console.log('Skip to dashboard called'); // Debug log
+    
+    // Calculate progress directly here instead of relying on state
+    const calculatedProgress = calculateProgressDirectly();
+    console.log('Directly calculated progress:', calculatedProgress); // Debug log
+    
+    // Update state
+    setProgress(calculatedProgress);
+    
+    // Navigate with the calculated data directly
+    navigateToDashboardWithData(calculatedProgress);
+  };
 
-    const simulatedProgress = allRemotes.map((remote) => {
-      const score_obtained = responses.reduce((total, questionResponse) => {
-        const response = questionResponse.responses.find(
-          (r) => r.student_remote_id === remote.student_remote_id
-        );
-        if (response) {
-          const question = testData.questions.find(
-            (q) => q.question_id === questionResponse.question_id
+  const navigateToDashboardWithData = (calculatedProgress: StudentProgress[]) => {
+    console.log('Navigate to dashboard with data called'); // Debug log
+    console.log('Using calculated progress:', calculatedProgress); // Debug log
+    
+    const questionStats = calculateQuestionStats();
+    
+    // Fix average score calculation using the calculated progress
+    let averageScore = 0;
+    if (calculatedProgress.length > 0) {
+      const studentsWithResponses = calculatedProgress.filter(student => student.answered_questions > 0);
+      if (studentsWithResponses.length > 0) {
+        const totalScore = studentsWithResponses.reduce((sum, student) => {
+          const studentPercentage = student.max_score > 0 
+            ? (student.score_obtained / student.max_score) * 100 
+            : 0;
+          return sum + studentPercentage;
+        }, 0);
+        averageScore = totalScore / studentsWithResponses.length;
+      }
+    }
+
+    // Calculate questions presented vs total questions
+    const questionsPresented = currentQuestionIndex + 1;
+    const totalQuestionsInTest = testData?.questions.length || 0;
+
+    const dashboardData = {
+      test_title: testData?.title || "Test Results",
+      total_students: allRemotes.length,
+      total_questions: totalQuestionsInTest, // Keep total questions for reference
+      questions_presented: questionsPresented, // Add new field for presented questions
+      average_score: averageScore,
+      question_stats: questionStats,
+      student_results: calculatedProgress, // Use calculated progress directly
+      is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
+    };
+
+    console.log('Dashboard data being saved:', dashboardData); // Debug log
+    console.log('Student results length:', dashboardData.student_results.length); // Debug log
+
+    // Save to localStorage for the dashboard to access
+    localStorage.setItem("testResults", JSON.stringify(dashboardData));
+    router.push("/results-dashboard");
+  };
+
+  const calculateProgressDirectly = () => {
+    if (!testData) return [];
+
+    console.log('Calculating progress directly'); // Debug log
+    console.log('Current responses:', responses); // Debug log
+    console.log('All remotes:', allRemotes); // Debug log
+    console.log('Current question index:', currentQuestionIndex); // Debug log
+
+    // Create detailed answer mapping for each student
+    const answerMappings: {
+      [studentId: string]: {
+        student_name: string;
+        answers: {
+          question_id: string;
+          question_text: string;
+          selected_option_id: string | null;
+          selected_option_text: string | null;
+          correct_option_id: string;
+          correct_option_text: string;
+          is_correct: boolean;
+          timestamp: number | null;
+        }[];
+      };
+    } = {};
+
+    // Initialize answer mappings for all students
+    allRemotes.forEach((remote) => {
+      answerMappings[remote.student_remote_id] = {
+        student_name: remote.student_remote_name,
+        answers: [],
+      };
+
+      // Process each question up to current question when skipping
+      testData.questions.forEach((question, questionIndex) => {
+        const correctOption = question.options.find(opt => opt.isCorrect);
+        
+        // Only process questions that have been presented (up to current question index)
+        const questionHasBeenPresented = questionIndex <= currentQuestionIndex;
+        
+        if (questionHasBeenPresented) {
+          const questionResponse = responses.find(
+            (qr) => qr.question_id === question.question_id
           );
-          if (
-            question?.options.find(
-              (opt) => opt.option_id === response.student_remote_response
-            )?.isCorrect
-          ) {
-            return total + 10;
+          
+          // Get the latest response for this student and question (based on timestamp)
+          let studentResponse = null;
+          if (questionResponse) {
+            const studentResponses = questionResponse.responses.filter(
+              (r) => r.student_remote_id === remote.student_remote_id
+            );
+            if (studentResponses.length > 0) {
+              // Sort by timestamp and take the latest one
+              studentResponse = studentResponses.sort((a, b) => b.timestamp - a.timestamp)[0];
+            }
           }
+
+          const selectedOption = studentResponse
+            ? question.options.find(opt => opt.option_id === studentResponse.student_remote_response)
+            : null;
+
+          const isCorrect = selectedOption ? selectedOption.isCorrect : false;
+
+          answerMappings[remote.student_remote_id].answers.push({
+            question_id: question.question_id,
+            question_text: question.question_text,
+            selected_option_id: selectedOption?.option_id || null,
+            selected_option_text: selectedOption?.option_text || null,
+            correct_option_id: correctOption?.option_id || "",
+            correct_option_text: correctOption?.option_text || "",
+            is_correct: isCorrect,
+            timestamp: studentResponse?.timestamp || null,
+          });
         }
-        return total;
-      }, 0);
+      });
+    });
+
+    // Calculate progress based on answer mappings
+    const calculatedProgress = allRemotes.map((remote) => {
+      const studentAnswers = answerMappings[remote.student_remote_id].answers;
+      const correctAnswers = studentAnswers.filter(answer => answer.is_correct).length;
+      const answeredQuestions = studentAnswers.filter(answer => answer.selected_option_id !== null).length;
+      const incorrectAnswered = studentAnswers.filter(answer => answer.selected_option_id !== null && !answer.is_correct).length;
+      
+      // For partial tests, only count questions that were actually presented
+      const questionsPresented = currentQuestionIndex + 1; // +1 because index is 0-based
+      const unansweredQuestions = questionsPresented - answeredQuestions;
+      const totalIncorrect = incorrectAnswered + unansweredQuestions;
 
       return {
         student_remote_id: remote.student_remote_id,
         student_remote_name: remote.student_remote_name,
-        score_obtained,
-        max_score: testData.questions.length * 10,
+        score_obtained: correctAnswers * 10, // 10 points per correct answer
+        max_score: questionsPresented * 10, // Only count questions that were presented
+        correct_answers: correctAnswers,
+        incorrect_answers: totalIncorrect,
+        total_questions: questionsPresented, // Update to reflect questions actually presented
+        answered_questions: answeredQuestions,
+        answer_details: studentAnswers,
       };
     });
 
-    setProgress(simulatedProgress);
+    console.log('Final calculated progress:', calculatedProgress); // Debug log
+    return calculatedProgress;
   };
+
+  const calculateQuestionStats = () => {
+    if (!testData) return [];
+
+    console.log('Calculating question stats for questions 0 to', currentQuestionIndex); // Debug log
+
+    // Only calculate stats for questions that have been presented
+    const questionsToAnalyze = testData.questions.slice(0, currentQuestionIndex + 1);
+
+    return questionsToAnalyze.map((question) => {
+      const questionResponse = responses.find(
+        (qr) => qr.question_id === question.question_id
+      );
+
+      const totalResponses = questionResponse ? questionResponse.responses.length : 0;
+      
+      let correctResponses = 0;
+      const optionStats = question.options.map(option => {
+        const responseCount = questionResponse 
+          ? questionResponse.responses.filter(
+              r => r.student_remote_response === option.option_id
+            ).length 
+          : 0;
+        
+        if (option.isCorrect) {
+          correctResponses = responseCount;
+        }
+
+        return {
+          option_id: option.option_id,
+          option_text: option.option_text,
+          response_count: responseCount,
+          percentage: totalResponses > 0 ? (responseCount / totalResponses) * 100 : 0,
+          is_correct: option.isCorrect
+        };
+      });
+
+      return {
+        question_id: question.question_id,
+        question_text: question.question_text,
+        total_responses: totalResponses,
+        correct_responses: correctResponses,
+        percentage_correct: totalResponses > 0 ? (correctResponses / totalResponses) * 100 : 0,
+        options: optionStats
+      };
+    });
+  };
+
+  const navigateToDashboard = () => {
+    console.log('Navigate to dashboard called'); // Debug log
+    console.log('Current progress state:', progress); // Debug log
+    
+    const questionStats = calculateQuestionStats();
+    
+    // Fix average score calculation to handle cases with no progress data
+    let averageScore = 0;
+    if (progress.length > 0) {
+      const studentsWithResponses = progress.filter(student => student.answered_questions > 0);
+      if (studentsWithResponses.length > 0) {
+        const totalScore = studentsWithResponses.reduce((sum, student) => {
+          const studentPercentage = student.max_score > 0 
+            ? (student.score_obtained / student.max_score) * 100 
+            : 0;
+          return sum + studentPercentage;
+        }, 0);
+        averageScore = totalScore / studentsWithResponses.length;
+      }
+    }
+
+    // Calculate questions presented vs total questions
+    const questionsPresented = currentQuestionIndex + 1;
+    const totalQuestionsInTest = testData?.questions.length || 0;
+
+    const dashboardData = {
+      test_title: testData?.title || "Test Results",
+      total_students: allRemotes.length,
+      total_questions: totalQuestionsInTest, // Keep total questions for reference
+      questions_presented: questionsPresented, // Add new field for presented questions
+      average_score: averageScore,
+      question_stats: questionStats,
+      student_results: progress, // This should now contain actual student data
+      is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
+    };
+
+    console.log('Dashboard data being saved:', dashboardData); // Debug log
+
+    // Save to localStorage for the dashboard to access
+    localStorage.setItem("testResults", JSON.stringify(dashboardData));
+    router.push("/results-dashboard");
+  };
+
+  // Updated renderQuestion function for src/app/(test-management)/test-screen/page.tsx
+  // This creates a two-column layout with questions on the left and student responses on the right
 
   const renderQuestion = (question: Question) => {
     const currentResponses =
       responses.find((r) => r.question_id === question.question_id)
         ?.responses || [];
 
-    const gridCols = Math.min(Math.max(allRemotes.length, 4), 8);
-
     if (phase === "collecting") {
       return (
-        <div className="w-full h-full bg-white">
-          <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-4">
-            {question.question_text}
-          </h3>
-          <div className="space-y-4">
-            {question.options.map((option) => (
-              <div
-                key={option.option_id}
-                className="flex items-center rounded-2xl space-x-2 py-3 px-4 border-[2px] border-[#E3E3E4]"
-              >
-                <span>{option.option_text}</span>
+        <div className="w-full h-full bg-white flex gap-6">
+          {/* Left Column - Question and Options */}
+          <div className="w-7/10 flex-shrink-0">
+            <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
+              {question.question_text}
+            </h3>
+            
+            {/* Question Options */}
+            <div className="space-y-3 mb-8">
+              {question.options.map((option, index) => (
+                <div
+                  key={option.option_id}
+                  className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
+                    {String.fromCharCode(65 + index)}
+                  </div>
+                  <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Question Images - Display after options */}
+            {question.images && question.images.length > 0 && (
+              <div className="mb-8">
+                {(() => {
+                  const gridColsClass = {
+                    1: "grid-cols-1",
+                    2: "grid-cols-2",
+                    3: "grid-cols-3",
+                    4: "grid-cols-4",
+                    5: "grid-cols-5",
+                    6: "grid-cols-6",
+                  }[question.images.length] || "grid-cols-4"; // fallback
+
+                  return (
+                    <div className={`grid gap-4 ${gridColsClass}`}>
+                      {question.images.map((imageName, index) => (
+                        <div key={index} className="flex flex-col items-center">
+                          <img
+                            src={`/assets/questions/${imageName}`}
+                            alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                            className="rounded-lg border border-gray-300 shadow-sm"
+                            onError={(e) => {
+                              console.error(`Failed to load image: ${imageName}`);
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                          <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                            Option {String.fromCharCode(65 + index)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
-            ))}
+            )}
           </div>
 
-          <div className="mt-4 rounded-lg">
-            <div className="text-lg font-tthoves p-4 text-[#4A4A4F] mt-[300px] w-full rounded-lg bg-blue-100">
-              Collecting responses... ({timeLeft}s)
-              <ul className={`list-disc pl-5 grid grid-cols-${gridCols}`}>
-                {allRemotes.slice(1).map((remote, index) => {
+          {/* Right Column - Student Responses */}
+          <div className="w-3/10 flex-shrink-0">
+            <div className="bg-blue-100 rounded-lg p-6 h-full">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F]">
+                  Student Responses
+                </h4>
+                <div className="text-sm font-tthoves text-[#4A4A4F]">
+                  Time Left: {timeLeft}s
+                </div>
+              </div>
+              
+              {/* Response Status Summary */}
+              <div className="mb-4 p-3 bg-white rounded-lg">
+                <div className="text-sm font-tthoves text-[#4A4A4F] mb-2">
+                  Response Progress: {currentResponses.length}/{allRemotes.length} students responded
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(currentResponses.length / allRemotes.length) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Student Response List */}
+              <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                {allRemotes.map((remote, index) => {
                   const matchingResponse = currentResponses.find(
                     (response) =>
                       response.student_remote_id === remote.student_remote_id
                   );
-                  const isMatchingId = !!matchingResponse;
+                  const hasResponded = !!matchingResponse;
+                  
+                  // Get the selected option text if student responded
+                  const selectedOption = hasResponded 
+                    ? question.options.find(opt => opt.option_id === matchingResponse.student_remote_response)
+                    : null;
+
                   return (
-                    <li
+                    <div
                       key={index}
-                      className={`${
-                        isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
-                      } flex items-center gap-3`}
+                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-200 ${
+                        hasResponded 
+                          ? "bg-green-50 border-green-200" 
+                          : "bg-white border-gray-200"
+                      }`}
                     >
-                      <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
-                        Student: {remote.student_remote_name || "Unknown"},
-                        {isMatchingId ? (
-                          <button
-                            type="button"
-                            className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                          >
-                            ✓
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                          >
-                            ✗
-                          </button>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
+                          hasResponded ? "bg-green-500" : "bg-gray-400"
+                        }`}>
+                          {hasResponded ? "✓" : index + 1}
+                        </div>
+                        <div>
+                          <div className="font-tthoves text-[#4A4A4F] text-sm">
+                            {remote.student_remote_name || "Unknown"}
+                          </div>
+                          {hasResponded && selectedOption && (
+                            <div className="text-xs text-gray-600">
+                              Selected: {String.fromCharCode(65 + question.options.findIndex(opt => opt.option_id === selectedOption.option_id))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </li>
+                      
+                      <div className={`w-3 h-3 rounded-full ${
+                        hasResponded ? "bg-green-500" : "bg-gray-300"
+                      }`}></div>
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
+
+              {/* Response Statistics */}
+              <div className="mt-4 pt-4 border-t border-gray-300">
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-lg font-tthoves-bold text-green-600">
+                      {currentResponses.length}
+                    </div>
+                    <div className="text-xs font-tthoves text-gray-600">
+                      Responded
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-lg font-tthoves-bold text-gray-600">
+                      {allRemotes.length - currentResponses.length}
+                    </div>
+                    <div className="text-xs font-tthoves text-gray-600">
+                      Pending
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       );
     }
+
+    // Displaying phase (when showing results)
     return (
-      <div className="w-full h-full relative bg-white">
-        <div className="w-full">
-          <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-4">
+      <div className="w-full h-full bg-white flex gap-6">
+        {/* Left Column - Question and Options with Results */}
+        <div className="w-7/10 flex-shrink-0">
+          <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
             {question.question_text}
           </h3>
-          <div className="space-y-4">
-            {question.options.map((option) => (
+          <div className="space-y-3 mb-8">
+            {question.options.map((option, index) => (
               <div
                 key={option.option_id}
-                className="flex items-center rounded-2xl space-x-2 py-3 px-4 border-[2px] border-[#E3E3E4]"
+                className="flex items-center rounded-xl space-x-3 py-4 px-6 border-[2px] border-[#E3E3E4] bg-white"
               >
-                <span>{option.option_text}</span>
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
+                  {String.fromCharCode(65 + index)}
+                </div>
+                <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
               </div>
             ))}
           </div>
-          <div className="mt-[300px] w-full rounded-lg">
-            {currentResponses.length > 0 ? (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <h4 className="text-lg font-tthoves text-[#4A4A4F]">
-                  Responses for Question {currentQuestionIndex + 1}:
-                </h4>
-                <ul className={`list-disc pl-5 grid grid-cols-${gridCols}`}>
-                  {allRemotes.map((remote, index) => {
-                    const matchingResponse = currentResponses.find(
-                      (response) =>
-                        response.student_remote_id === remote.student_remote_id
-                    );
-                    const isMatchingId = !!matchingResponse;
-                    return (
-                      <li
-                        key={index}
-                        className={`${
-                          isMatchingId ? "bg-yellow-200 p-1 rounded" : "p-1"
-                        } flex items-center gap-3`}
-                      >
-                        <div className="flex items-center gap-2 border-2 border-[#E3E3E4] rounded-xl p-4 bg-white">
-                          Student: {remote.student_remote_name || "Unknown"},
-                          {isMatchingId ? (
-                            <button
-                              type="button"
-                              className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                            >
-                              ✓
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                            >
-                              ✗
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+          {question.images && question.images.length > 0 && (
+            <div className="mb-8">
+              {(() => {
+                const gridColsClass = {
+                  1: "grid-cols-1",
+                  2: "grid-cols-2",
+                  3: "grid-cols-3",
+                  4: "grid-cols-4",
+                  5: "grid-cols-5",
+                  6: "grid-cols-6",
+                }[question.images.length] || "grid-cols-4";
+
+                return (
+                  <div className={`grid gap-4 ${gridColsClass}`}>
+                    {question.images.map((imageName, index) => (
+                      <div key={index} className="flex flex-col items-center">
+                        <img
+                          src={`/assets/questions/${imageName}`}
+                          alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                          className="rounded-lg border border-gray-300 shadow-sm"
+                          onError={(e) => {
+                            console.error(`Failed to load image: ${imageName}`);
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                        <span className="text-sm text-gray-600 mt-2 font-tthoves">
+                          Option {String.fromCharCode(65 + index)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column - Final Response Summary */}
+        <div className="w-3/10 flex-shrink-0">
+          <div className="bg-gray-100 rounded-lg p-6 h-full">
+            <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F] mb-4">
+              Response Summary
+            </h4>
+            
+            {/* Show response breakdown by option */}
+            <div className="space-y-3">
+              {question.options.map((option, index) => {
+                const optionResponses = currentResponses.filter(
+                  r => r.student_remote_response === option.option_id
+                );
+                const responseCount = optionResponses.length;
+                const percentage = currentResponses.length > 0 
+                  ? (responseCount / currentResponses.length) * 100 
+                  : 0;
+
+                return (
+                  <div key={option.option_id} className="bg-white rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-[#5423E6] text-white flex items-center justify-center text-sm font-semibold">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className="font-tthoves text-sm text-[#4A4A4F]">
+                          {option.option_text}
+                        </span>
+                        {option.isCorrect && (
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                            CORRECT
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-tthoves-semiBold text-[#4A4A4F]">
+                        {responseCount} ({Math.round(percentage)}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          option.isCorrect ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${Math.max(percentage, 2)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Total response count */}
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <div className="text-center bg-white rounded-lg p-3">
+                <div className="text-lg font-tthoves-bold text-[#4A4A4F]">
+                  {currentResponses.length}/{allRemotes.length}
+                </div>
+                <div className="text-sm font-tthoves text-gray-600">
+                  Total Responses
+                </div>
               </div>
-            ) : (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <p className="text-lg font-tthoves text-[#4A4A4F]">
-                  No responses received for this question.
-                </p>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
+  // Load questions and set up remotes
   useEffect(() => {
-    setTestData(dummyTestData);
+    const questionsData = loadQuestionsFromJSON();
+    setTestData(questionsData);
+  }, []);
+
+  useEffect(() => {
     if (receiver?.remotes) {
-      const transformedRemotes = receiver.remotes.map((remote) => ({
+      // Filter out remote 1 (teacher remote - first item in array)
+      const transformedRemotes = receiver.remotes.slice(1).map((remote) => ({
         student_remote_id: remote.remote_id,
         student_remote_mac_id: remote.remote_id,
         student_remote_name: remote.remote_name,
@@ -703,18 +986,6 @@ export default function TestScreen() {
     return () => clearInterval(timer);
   }, [testData, usbConnected, phase, showCompletionModal]);
 
-  useEffect(() => {
-    if (!document.fullscreenElement && document.fullscreenEnabled) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.log("Error entering fullscreen on load:", err);
-        setFullscreenError(
-          "Could not enter fullscreen automatically. Please click the fullscreen button to continue."
-        );
-      });
-      setIsFullscreen(true);
-    }
-  }, []);
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -726,12 +997,12 @@ export default function TestScreen() {
   if (!testData || !testData.questions || testData.questions.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-lg">No questions available</div>
+        <div className="text-lg text-red-500">No questions available</div>
       </div>
     );
   }
 
-  if (!usbConnected || !isFullscreen) {
+  if (!usbConnected) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow-lg text-center">
@@ -742,7 +1013,7 @@ export default function TestScreen() {
             Please connect the USB device and enter fullscreen mode to start the
             test.
           </p>
-          {!usbConnected && isFullscreen && (
+          {!usbConnected && (
             <button
               type="button"
               onClick={connectToUSBDevice}
@@ -750,20 +1021,6 @@ export default function TestScreen() {
             >
               Connect USB Device
             </button>
-          )}
-          {!isFullscreen && (
-            <button
-              type="button"
-              onClick={handleFullscreenToggle}
-              className="bg-[#5423E6] text-white px-6 py-2 rounded-lg"
-            >
-              {usbConnected
-                ? "To start test, Fullscreen mode is required."
-                : "Next"}
-            </button>
-          )}
-          {fullscreenError && !isFullscreen && (
-            <div className="mt-4 text-red-500">{fullscreenError}</div>
           )}
           {error && usbConnected && (
             <div className="mt-4 text-red-500">{error}</div>
@@ -794,11 +1051,23 @@ export default function TestScreen() {
                       <th className="border border-gray-200 p-3 text-left font-tthoves font-medium">
                         Remote ID
                       </th>
-                      <th className="border border-gray-200 p-3 text-left font-tthoves font-medium">
-                        Score Obtained
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Correct Answers
                       </th>
-                      <th className="border border-gray-200 p-3 text-left font-tthoves font-medium">
-                        Max Score
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Incorrect Answers
+                      </th>
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Total Questions
+                      </th>
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Answered Questions
+                      </th>
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Score
+                      </th>
+                      <th className="border border-gray-200 p-3 text-center font-tthoves font-medium">
+                        Percentage
                       </th>
                     </tr>
                   </thead>
@@ -814,11 +1083,37 @@ export default function TestScreen() {
                         <td className="border border-gray-200 p-3 text-[#4A4A4F] font-tthoves">
                           {item.student_remote_id}
                         </td>
-                        <td className="border border-gray-200 p-3 text-[#4A4A4F] font-tthoves">
-                          {item.score_obtained}
+                        <td className="border border-gray-200 p-3 text-center font-tthoves">
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm font-semibold">
+                            {item.correct_answers}
+                          </span>
                         </td>
-                        <td className="border border-gray-200 p-3 text-[#4A4A4F] font-tthoves">
-                          {item.max_score}
+                        <td className="border border-gray-200 p-3 text-center font-tthoves">
+                          <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm font-semibold">
+                            {item.incorrect_answers}
+                          </span>
+                        </td>
+                        <td className="border border-gray-200 p-3 text-center text-[#4A4A4F] font-tthoves">
+                          {item.total_questions}
+                        </td>
+                        <td className="border border-gray-200 p-3 text-center font-tthoves">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm font-semibold">
+                            {item.answered_questions}
+                          </span>
+                        </td>
+                        <td className="border border-gray-200 p-3 text-center text-[#4A4A4F] font-tthoves font-semibold">
+                          {item.score_obtained}/{item.max_score}
+                        </td>
+                        <td className="border border-gray-200 p-3 text-center font-tthoves">
+                          <span className={`px-2 py-1 rounded-full text-sm font-semibold ${
+                            (item.score_obtained / item.max_score) * 100 >= 70
+                              ? 'bg-green-100 text-green-800'
+                              : (item.score_obtained / item.max_score) * 100 >= 50
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {Math.round((item.score_obtained / item.max_score) * 100)}%
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -835,13 +1130,22 @@ export default function TestScreen() {
                 You have completed the test. Click below to return to the
                 dashboard.
               </p>
-              <button
-                type="button"
-                onClick={() => router.push("/")}
-                className="bg-[#5423E6] text-white px-8 py-3 rounded-lg font-tthoves hover:bg-[#4A1FCC] transition-colors"
-              >
-                Back to Dashboard
-              </button>
+              <div className="flex justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={navigateToDashboard}
+                  className="bg-[#5423E6] text-white px-8 py-3 rounded-lg font-tthoves hover:bg-[#4A1FCC] transition-colors"
+                >
+                  View Results Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className="bg-gray-500 text-white px-8 py-3 rounded-lg font-tthoves hover:bg-gray-600 transition-colors"
+                >
+                  Back to Home
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -849,7 +1153,7 @@ export default function TestScreen() {
       <div className="w-full p-6 rounded-lg mb-20">
         <div className="mb-4 flex justify-between items-center">
           <div className="text-[#4A1FCC] font-tthoves-semiBold text-2xl">
-            Question {currentQuestionIndex + 1}
+            Question {currentQuestionIndex + 1} of {testData.questions.length}
           </div>
           <div className="flex items-center gap-4">
             {phase === "collecting" && (
@@ -857,12 +1161,13 @@ export default function TestScreen() {
                 Time Left: {timeLeft}s
               </div>
             )}
+            {/* Skip to Dashboard Button */}
             <button
               type="button"
-              onClick={handleFullscreenToggle}
-              className="text-[#4A4A4F] font-tthoves text-lg"
+              onClick={handleSkipToDashboard}
+              className="bg-orange-500 text-white px-4 py-2 rounded-lg font-tthoves hover:bg-orange-600 transition-colors text-sm"
             >
-              {isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              Skip to Dashboard
             </button>
           </div>
         </div>
@@ -884,7 +1189,15 @@ export default function TestScreen() {
             className="ml-2"
           />
         </button>
-        <div className="mt-4">
+        <div className="flex items-center gap-4">
+          {/* Additional Skip to Dashboard button in the bottom bar */}
+          <button
+            type="button"
+            onClick={handleSkipToDashboard}
+            className="bg-orange-500 text-white px-6 py-2 rounded-lg font-tthoves hover:bg-orange-600 transition-colors"
+          >
+            Skip to Dashboard
+          </button>
           <button
             type="button"
             onClick={handleNext}

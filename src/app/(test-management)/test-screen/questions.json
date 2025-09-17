@@ -1,0 +1,140 @@
+{
+  "test_id": "multi_subject_test_1",
+  "title": "Multi-Subject Quiz",
+  "points": 100,
+  "test_type": "mcq",
+  "order": 1,
+  "questions": [
+    {
+      "question_id": "q1",
+      "question_text": "Which of the following are parallelograms?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "images": ["question_1a.png", "question_1b.png", "question_1c.png", "question_1d.png"],
+      "options": [
+        { "option_id": "q1_opt1", "option_text": "Kite", "content": "", "isCorrect": false },
+        { "option_id": "q1_opt2", "option_text": "Floor Tile", "content": "", "isCorrect": true },
+        { "option_id": "q1_opt3", "option_text": "Roti", "content": "", "isCorrect": false },
+        { "option_id": "q1_opt4", "option_text": "Sandwich", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q2",
+      "question_text": "Find the area of the parallelogram with a base of 8 in and a height of 12 in?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "images": ["question_2.png"],
+      "options": [
+        { "option_id": "q2_opt1", "option_text": "96 in²", "content": "", "isCorrect": true },
+        { "option_id": "q2_opt2", "option_text": "42 in²", "content": "", "isCorrect": false },
+        { "option_id": "q2_opt3", "option_text": "48 in", "content": "", "isCorrect": false },
+        { "option_id": "q2_opt4", "option_text": "20 in²", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q3",
+      "question_text": "The area of this rectangle and this parallelogram is the same. True or False?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "images": ["question_3.png"],
+      "options": [
+        { "option_id": "q3_opt1", "option_text": "TRUE", "content": "", "isCorrect": true },
+        { "option_id": "q3_opt2", "option_text": "FALSE", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q4",
+      "question_text": "What is 24 + 38?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q4_opt1", "option_text": "52", "content": "", "isCorrect": false },
+        { "option_id": "q4_opt2", "option_text": "62", "content": "", "isCorrect": true },
+        { "option_id": "q4_opt3", "option_text": "58", "content": "", "isCorrect": false },
+        { "option_id": "q4_opt4", "option_text": "64", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q5",
+      "question_text": "What is 7 x 6?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q5_opt1", "option_text": "36", "content": "", "isCorrect": false },
+        { "option_id": "q5_opt2", "option_text": "48", "content": "", "isCorrect": false },
+        { "option_id": "q5_opt3", "option_text": "42", "content": "", "isCorrect": true },
+        { "option_id": "q5_opt4", "option_text": "45", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q6",
+      "question_text": "What is 54 / 9?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q6_opt1", "option_text": "5", "content": "", "isCorrect": false },
+        { "option_id": "q6_opt2", "option_text": "6", "content": "", "isCorrect": true },
+        { "option_id": "q6_opt3", "option_text": "7", "content": "", "isCorrect": false },
+        { "option_id": "q6_opt4", "option_text": "8", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q7",
+      "question_text": "What is the capital of France?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q7_opt1", "option_text": "Berlin", "content": "", "isCorrect": false },
+        { "option_id": "q7_opt2", "option_text": "Madrid", "content": "", "isCorrect": false },
+        { "option_id": "q7_opt3", "option_text": "Paris", "content": "", "isCorrect": true },
+        { "option_id": "q7_opt4", "option_text": "Rome", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q8",
+      "question_text": "Which planet is known as the Red Planet?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q8_opt1", "option_text": "Earth", "content": "", "isCorrect": false },
+        { "option_id": "q8_opt2", "option_text": "Mars", "content": "", "isCorrect": true },
+        { "option_id": "q8_opt3", "option_text": "Jupiter", "content": "", "isCorrect": false },
+        { "option_id": "q8_opt4", "option_text": "Venus", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q9",
+      "question_text": "Who wrote 'Romeo and Juliet'?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q9_opt1", "option_text": "William Shakespeare", "content": "", "isCorrect": true },
+        { "option_id": "q9_opt2", "option_text": "Charles Dickens", "content": "", "isCorrect": false },
+        { "option_id": "q9_opt3", "option_text": "Jane Austen", "content": "", "isCorrect": false },
+        { "option_id": "q9_opt4", "option_text": "Mark Twain", "content": "", "isCorrect": false }
+      ]
+    },
+    {
+      "question_id": "q10",
+      "question_text": "What is the chemical symbol for water?",
+      "content": "",
+      "format": "mcq",
+      "answer_text": null,
+      "options": [
+        { "option_id": "q10_opt1", "option_text": "O2", "content": "", "isCorrect": false },
+        { "option_id": "q10_opt2", "option_text": "H2O", "content": "", "isCorrect": true },
+        { "option_id": "q10_opt3", "option_text": "CO2", "content": "", "isCorrect": false },
+        { "option_id": "q10_opt4", "option_text": "NaCl", "content": "", "isCorrect": false }
+      ]
+    }
+  ]
+}
