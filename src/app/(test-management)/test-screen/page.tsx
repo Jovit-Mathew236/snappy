@@ -150,11 +150,7 @@ export default function TestScreen() {
   }, []);
 
   useEffect(() => {
-    interface USBDisconnectEvent extends Event {
-      device?: USBDevice;
-    }
-
-    const handleDisconnect = (event: USBDisconnectEvent) => {
+    const handleDisconnect = (event: USBDeviceEvent) => {
       console.log("USB disconnect event:", event);
       setError("USB device disconnected. Please reconnect to continue.");
       usbListeningRef.current = false; // Ensure this stops the loop
@@ -168,10 +164,6 @@ export default function TestScreen() {
 
   async function getAndOpenDevice(): Promise<USBDevice> {
     try {
-      const deviceInfo = JSON.parse(
-        localStorage.getItem("currentDeviceInfo") || "{}"
-      );
-
       // First try to find device by vendor/product ID only (ignore serial number)
       const devices = await navigator.usb.getDevices();
       let device = devices.find(
@@ -200,7 +192,7 @@ export default function TestScreen() {
             })
           );
         } catch (requestError) {
-          throw new Error("Device authorization was cancelled or failed. Please try again.");
+          throw new Error("Device authorization was cancelled or failed. Please try again. " + requestError);
         }
       }
 

@@ -161,9 +161,6 @@ const TestRemotesPage: React.FC = () => {
 
   async function getAndOpenDevice(): Promise<USBDevice> {
     try {
-      const deviceInfo = JSON.parse(
-        localStorage.getItem("currentDeviceInfo") || "{}"
-      );
 
       // First try to find device by vendor/product ID only (ignore serial number)
       const devices = await navigator.usb.getDevices();
@@ -193,7 +190,7 @@ const TestRemotesPage: React.FC = () => {
             })
           );
         } catch (requestError) {
-          throw new Error("Device authorization was cancelled or failed. Please try again.");
+          throw new Error("Device authorization was cancelled or failed. Please try again. " + requestError);
         }
       }
 
@@ -325,6 +322,8 @@ const TestRemotesPage: React.FC = () => {
                         }
                       }));
 
+                      console.log(recentPresses)
+
                       // Update last button press for the specific remote
                       setLastButtonPress(prev => ({
                         ...prev,
@@ -436,10 +435,6 @@ const TestRemotesPage: React.FC = () => {
 
   const handleBackToUSB = () => {
     setScreenState("usb-connection");
-  };
-
-  const isButtonPressed = (remoteId: string, button: string): boolean => {
-    return Boolean(recentPresses[`${remoteId}-${button}`]);
   };
 
   // Receiver Selection Screen
@@ -633,7 +628,7 @@ const TestRemotesPage: React.FC = () => {
               {error}
               {error.includes("disconnected") && (
                 <div className="mt-2">
-                  <p className="text-sm mb-2">Don't worry! Your remote configurations are saved.</p>
+                  <p className="text-sm mb-2">Don&apos;t worry! Your remote configurations are saved.</p>
                   <button
                     onClick={() => setScreenState("usb-connection")}
                     className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 text-sm"
