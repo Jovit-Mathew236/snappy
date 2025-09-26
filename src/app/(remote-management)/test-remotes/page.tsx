@@ -1,5 +1,6 @@
 "use client";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { addReceiver, addRemote } from "@/app/redux/feature/remoteSlice/remoteSlice";
 import renderSvg from "@/svgImport";
 import renderImg from "@/imgImport";
 import React, { useState, useEffect, useRef } from "react";
@@ -32,9 +33,20 @@ interface RemoteButtonPress {
   timestamp: number;
 }
 
+interface LastButtonPress {
+  button: string;
+  timestamp: number;
+}
+
+interface PreviousButtonPress {
+  button: string;
+  timestamp: number;
+}
+
 type ScreenState = "selection" | "usb-connection" | "testing";
 
 const TestRemotesPage: React.FC = () => {
+  const dispatch = useDispatch();
   const { receivers } = useSelector((state: RootState) => state.remote);
   const [selectedReceiver, setSelectedReceiver] = useState<string>("");
   const [screenState, setScreenState] = useState<ScreenState>("selection");
@@ -43,7 +55,11 @@ const TestRemotesPage: React.FC = () => {
   const [usbConnected, setUsbConnected] = useState(false);
   const [buttonPresses, setButtonPresses] = useState<RemoteButtonPress[]>([]);
   const [recentPresses, setRecentPresses] = useState<{ [key: string]: { button: string; timestamp: number } }>({});
-  
+  const [lastButtonPress, setLastButtonPress] = useState<{ [remoteId: string]: LastButtonPress }>({});
+  const [previousButtonPress, setPreviousButtonPress] = useState<{ [remoteId: string]: PreviousButtonPress }>({});
+  const [savedConfigurations, setSavedConfigurations] = useState<Receiver[]>([]);
+  const [showReconnectOption, setShowReconnectOption] = useState(false);
+
   const platform = getOS();
   const deviceRef = useRef<USBDevice | null>(null);
   const usbListeningRef = useRef<boolean>(false);
@@ -54,7 +70,7 @@ const TestRemotesPage: React.FC = () => {
   const mapValueToButton = (value: number): string => {
     const mapping: { [key: number]: string } = {
       1: "A",
-      2: "B", 
+      2: "B",
       3: "C",
       4: "D",
       5: "E",
@@ -65,11 +81,22 @@ const TestRemotesPage: React.FC = () => {
     return mapping[value] || "";
   };
 
-  // Initialize snappy-remote
+  // Initialize snappy-remote and load saved configurations
+  // Handle 3-second timer for button press persistence
   useEffect(() => {
     async function initialize() {
       try {
         await init();
+        // Load saved receiver configurations from localStorage
+        const savedConfigs = localStorage.getItem('savedReceiverConfigurations');
+        if (savedConfigs) {
+          const parsedConfigs: Receiver[] = JSON.parse(savedConfigs);
+          setSavedConfigurations(parsedConfigs);
+          // Check if we should show reconnect option
+          if (parsedConfigs.length > 0 && receivers.length === 0) {
+            setShowReconnectOption(true);
+          }
+        }
       } catch (initError) {
         console.error("Initialization error:", initError);
         setError("Failed to initialize remote communication");
@@ -80,10 +107,15 @@ const TestRemotesPage: React.FC = () => {
 
   // USB disconnect handler
   useEffect(() => {
-    const handleDisconnect = () => {
+    interface USBDisconnectEvent extends Event {
+      device?: USBDevice;
+    }
+
+    const handleDisconnect = (event: USBDisconnectEvent) => {
+      console.log("USB disconnect event:", event);
       setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue.");
-      usbListeningRef.current = false;
+      setError("USB device disconnected. Your remote configurations are saved and can be restored when you reconnect.");
+      usbListeningRef.current = false; // Ensure this stops the loop
       deviceRef.current = null;
       if (screenState === "testing") {
         setScreenState("usb-connection");
@@ -94,22 +126,76 @@ const TestRemotesPage: React.FC = () => {
     return () => navigator.usb.removeEventListener("disconnect", handleDisconnect);
   }, [screenState]);
 
+  // Auto-save receiver configurations whenever they change
+  useEffect(() => {
+    if (receivers.length > 0) {
+      localStorage.setItem('savedReceiverConfigurations', JSON.stringify(receivers));
+      setShowReconnectOption(false);
+    }
+  }, [receivers]);
+  useEffect(() => {
+    const timers: { [remoteId: string]: NodeJS.Timeout } = {};
+
+    Object.entries(lastButtonPress).forEach(([remoteId, press]) => {
+      const timeSincePress = Date.now() - press.timestamp;
+      if (timeSincePress < 3000) {
+        timers[remoteId] = setTimeout(() => {
+          // Move current press to previous and clear current
+          setPreviousButtonPress(prev => ({
+            ...prev,
+            [remoteId]: { button: press.button, timestamp: press.timestamp }
+          }));
+          setLastButtonPress(prev => {
+            const updated = { ...prev };
+            delete updated[remoteId];
+            return updated;
+          });
+        }, 3000 - timeSincePress);
+      }
+    });
+
+    return () => {
+      Object.values(timers).forEach(timer => clearTimeout(timer));
+    };
+  }, [lastButtonPress]);
+
   async function getAndOpenDevice(): Promise<USBDevice> {
     try {
       const deviceInfo = JSON.parse(
         localStorage.getItem("currentDeviceInfo") || "{}"
       );
-      if (!deviceInfo.vendorId || !deviceInfo.productId) {
-        throw new Error("No device information found in localStorage.");
-      }
 
+      // First try to find device by vendor/product ID only (ignore serial number)
       const devices = await navigator.usb.getDevices();
-      const device = devices.find(
+      let device = devices.find(
         (d) =>
-          d.vendorId === deviceInfo.vendorId &&
-          d.productId === deviceInfo.productId &&
-          (!deviceInfo.serialNumber || d.serialNumber === deviceInfo.serialNumber)
+          d.vendorId === 0xb1b0 &&
+          (d.productId === 0x8055 || d.productId === 0x5508)
       );
+
+      // If device not found in authorized devices, request authorization
+      if (!device) {
+        console.log("Device not found in authorized devices, requesting authorization...");
+        try {
+          device = await navigator.usb.requestDevice({
+            filters: [
+              { vendorId: 0xb1b0, productId: 0x8055 },
+              { vendorId: 0xb1b0, productId: 0x5508 }
+            ],
+          });
+
+          // Update localStorage with the newly authorized device info (without serial number)
+          localStorage.setItem(
+            "currentDeviceInfo",
+            JSON.stringify({
+              vendorId: device.vendorId,
+              productId: device.productId,
+            })
+          );
+        } catch (requestError) {
+          throw new Error("Device authorization was cancelled or failed. Please try again.");
+        }
+      }
 
       if (!device) {
         throw new Error("Device not found or not authorized.");
@@ -150,7 +236,7 @@ const TestRemotesPage: React.FC = () => {
       const serialNumber = deviceRef.current.serialNumber || "";
       const command = new TextEncoder().encode("START\n");
       const descriptorIndex = serialNumber ? 0 : 3;
-      
+
       const result = await deviceRef.current.controlTransferIn(
         {
           requestType: "standard",
@@ -189,9 +275,14 @@ const TestRemotesPage: React.FC = () => {
       usbListeningRef.current = true;
       setScreenState("testing");
 
-      // Start listening for button presses
-      while (usbListeningRef.current) {
+      // ✅ FIXED LOOP - Start listening for button presses
+      while (usbListeningRef.current && deviceRef.current) {
         try {
+          // Check if device is still connected before transfer
+          if (!deviceRef.current || !usbListeningRef.current) {
+            break;
+          }
+
           const result = await deviceRef.current.transferIn(2, 64);
 
           if (result.status === "ok" && result.data) {
@@ -199,11 +290,11 @@ const TestRemotesPage: React.FC = () => {
             if (int8Array.length === 17) {
               const data = new Uint8Array([...int8Array.slice(0, 17)]);
               const answer = decrypt(serial_number, data);
-              
+
               if (typeof answer === "string" && answer.trim().startsWith("{")) {
                 try {
                   const jsonData: { MAC: string; value: number } = JSON.parse(answer);
-                  
+
                   if (jsonData.MAC && jsonData.value !== undefined) {
                     // Include ALL remotes (including teacher remote - don't filter out index 0)
                     const matchingRemote = selectedReceiverData?.remotes.find(
@@ -213,7 +304,7 @@ const TestRemotesPage: React.FC = () => {
                     if (matchingRemote && jsonData.value >= 1 && jsonData.value <= 8) {
                       const buttonPressed = mapValueToButton(jsonData.value);
                       const timestamp = Date.now();
-                      
+
                       // Add to button presses history
                       setButtonPresses(prev => [
                         ...prev,
@@ -233,6 +324,12 @@ const TestRemotesPage: React.FC = () => {
                           timestamp
                         }
                       }));
+
+                      // Update last button press for the specific remote
+                      setLastButtonPress(prev => ({
+                        ...prev,
+                        [matchingRemote.remote_id]: { button: buttonPressed, timestamp }
+                      }));
                     }
                   }
                 } catch (parseError) {
@@ -242,14 +339,31 @@ const TestRemotesPage: React.FC = () => {
             }
           }
         } catch (transferError) {
-          if (usbListeningRef.current) {
-            console.error("Transfer error:", transferError);
+          console.error("Transfer error:", transferError);
+          // Check if it's a disconnect error
+          if (transferError instanceof DOMException &&
+            (transferError.name === 'NetworkError' || transferError.name === 'NotFoundError')) {
+            console.log("Device disconnected during transfer");
+            usbListeningRef.current = false;
+            break;
+          }
+          // For other errors, continue but check if we should still be listening
+          if (!usbListeningRef.current) {
+            break;
           }
         }
       }
     } catch (error: unknown) {
       console.error("USB connection error:", error);
-      setError(error instanceof Error ? error.message : "Failed to connect to USB device");
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect to USB device";
+
+      if (errorMessage.includes("authorization was cancelled")) {
+        setError("Device authorization was cancelled. Please click 'Connect USB Device' again and select your receiver from the list.");
+      } else if (errorMessage.includes("not found or not authorized")) {
+        setError("USB receiver not found. Please ensure it's connected and try again. You may need to authorize the device.");
+      } else {
+        setError(errorMessage);
+      }
       setIsLoading(false);
     }
   }
@@ -277,8 +391,47 @@ const TestRemotesPage: React.FC = () => {
     setScreenState("selection");
     setButtonPresses([]);
     setRecentPresses({});
+    setLastButtonPress({});
+    setPreviousButtonPress({});
     setError(null);
     setSelectedReceiver("");
+  };
+
+  const handleLoadSavedConfigurations = () => {
+    // Restore saved configurations by dispatching Redux actions
+    setError(null);
+    try {
+      savedConfigurations.forEach((receiver) => {
+        // First add the receiver
+        dispatch(addReceiver({
+          receiverName: receiver.receiverName,
+          receiverID: receiver.receiverID
+        }));
+
+        // Then add all remotes for this receiver
+        receiver.remotes.forEach((remote) => {
+          dispatch(addRemote({
+            receiverID: receiver.receiverID,
+            remote: {
+              remote_name: remote.remote_name,
+              remote_id: remote.remote_id
+            }
+          }));
+        });
+      });
+
+      setShowReconnectOption(false);
+      setError(null);
+
+      // Show success message
+      const totalRemotes = savedConfigurations.reduce((total, receiver) => total + receiver.remotes.length, 0);
+      setError(null);
+      console.log(`Successfully restored ${savedConfigurations.length} receiver(s) with ${totalRemotes} total remotes`);
+
+    } catch (error) {
+      console.error("Error loading saved configurations:", error);
+      setError("Failed to load saved configurations. Please try again.");
+    }
   };
 
   const handleBackToUSB = () => {
@@ -307,6 +460,30 @@ const TestRemotesPage: React.FC = () => {
             Select Receiver for Remote Testing
           </h1>
 
+          {/* Show reconnect option if saved configurations exist */}
+          {showReconnectOption && savedConfigurations.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-tthoves-semiBold text-blue-800 mb-2">
+                    Saved Configurations Available
+                  </h3>
+                  <p className="text-sm text-blue-600">
+                    Found {savedConfigurations.length} saved receiver configuration(s) with{" "}
+                    {savedConfigurations.reduce((total, receiver) => total + receiver.remotes.length, 0)} total remotes.
+                    Would you like to restore them?
+                  </p>
+                </div>
+                <button
+                  onClick={handleLoadSavedConfigurations}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-tthoves-semiBold"
+                >
+                  Load Saved
+                </button>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {error}
@@ -322,11 +499,10 @@ const TestRemotesPage: React.FC = () => {
               {receivers.map((receiver, index) => (
                 <div
                   key={receiver.receiverID}
-                  className={`bg-[#F0F0F0] rounded-xl p-4 cursor-pointer transition-colors ${
-                    selectedReceiver === receiver.receiverID
-                      ? "border-2 border-[#5423E6] bg-blue-50"
-                      : "border-2 border-transparent hover:border-gray-300"
-                  }`}
+                  className={`bg-[#F0F0F0] rounded-xl p-4 cursor-pointer transition-colors ${selectedReceiver === receiver.receiverID
+                    ? "border-2 border-[#5423E6] bg-blue-50"
+                    : "border-2 border-transparent hover:border-gray-300"
+                    }`}
                   onClick={() => handleReceiverSelect(receiver.receiverID)}
                   role="button"
                   aria-label={`Select receiver ${receiver.receiverName || "Unnamed Receiver"}`}
@@ -440,7 +616,7 @@ const TestRemotesPage: React.FC = () => {
                 {selectedReceiverData?.remotes.length} remotes will be tested
               </p>
             </div>
-            
+
             <div className="flex flex-wrap justify-center gap-2 mb-6">
               {selectedReceiverData?.remotes.map((remote, index) => (
                 <div key={remote.remote_id} className="bg-gray-100 rounded-lg px-3 py-1 text-sm">
@@ -455,6 +631,17 @@ const TestRemotesPage: React.FC = () => {
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 text-center">
               {error}
+              {error.includes("disconnected") && (
+                <div className="mt-2">
+                  <p className="text-sm mb-2">Don't worry! Your remote configurations are saved.</p>
+                  <button
+                    onClick={() => setScreenState("usb-connection")}
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 text-sm"
+                  >
+                    Reconnect USB Device
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -479,11 +666,10 @@ const TestRemotesPage: React.FC = () => {
             <button
               onClick={connectToUSBDevice}
               disabled={isLoading}
-              className={`w-full py-4 px-6 rounded-lg font-tthoves-semiBold text-lg transition-colors duration-200 shadow-md ${
-                usbConnected
-                  ? "bg-green-500 text-white hover:bg-green-600"
-                  : "bg-[#5423E6] text-white hover:bg-[#4338CA]"
-              } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`w-full py-4 px-6 rounded-lg font-tthoves-semiBold text-lg transition-colors duration-200 shadow-md ${usbConnected
+                ? "bg-green-500 text-white hover:bg-green-600"
+                : "bg-[#5423E6] text-white hover:bg-[#4338CA]"
+                } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {isLoading ? (
                 <div className="flex items-center justify-center">
@@ -502,7 +688,7 @@ const TestRemotesPage: React.FC = () => {
     );
   }
 
-  // Remote Testing Screen
+  // Remote Testing Screen - Updated with compact cards
   return (
     <div className="flex flex-col items-center justify-start min-h-[100vh] bg-[#E3E3E4] p-6 font-tthoves-medium">
       <div className="absolute z-0">
@@ -514,7 +700,7 @@ const TestRemotesPage: React.FC = () => {
         />
       </div>
 
-      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-md p-6 z-20">
+      <div className="w-full bg-white rounded-2xl shadow-md p-6 z-20">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl text-[#0A0A0A] font-tthoves-semiBold">
             Remote Testing - {selectedReceiverData?.receiverName}
@@ -536,57 +722,88 @@ const TestRemotesPage: React.FC = () => {
         </div>
 
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-          ✓ USB Connected - Press any button on your remotes to test (All remotes including Teacher remote)
+          ✓ USB Connected - Press any button on your remotes to test
         </div>
 
-        <div className="space-y-4">
-          {selectedReceiverData?.remotes.map((remote, index) => (
-            <div key={remote.remote_id} className="bg-[#F0F0F0] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg text-[#5423E6] font-tthoves-semiBold">
-                    {index === 0 ? "Teacher Remote" : `Student Remote ${index}`}: {remote.remote_name}
+        {/* Compact Remote Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-10 gap-4">
+          {selectedReceiverData?.remotes.map((remote, index) => {
+            const currentPress = lastButtonPress[remote.remote_id];
+            const previousPress = previousButtonPress[remote.remote_id];
+
+            return (
+              <div
+                key={remote.remote_id}
+                className="bg-[#F8F9FA] border-2 border-gray-200 rounded-xl p-4 min-h-[160px] flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow"
+              >
+                {/* Remote Info */}
+                <div className="text-center mb-3">
+                  <div className="mb-2">
+                    <Image
+                      src={renderSvg("remote")}
+                      alt="Remote icon"
+                      className="w-8 h-8 mx-auto"
+                      width={32}
+                      height={32}
+                    />
+                  </div>
+                  <h3 className="text-sm font-tthoves-bold text-[#0A0A0A] leading-tight">
+                    {index === 0 ? "Teacher" : `Student ${index}`}
                   </h3>
-                  <p className="text-sm text-[#4A4A4F] font-tthoves-regular">
-                    MAC ID: {remote.remote_id}
+                  <p className="text-xs font-tthoves-bold text-[#5423E6] mb-1">
+                    {remote.remote_name}
+                  </p>
+                  <p className="text-xs font-tthoves-bold text-[#4A4A4F] break-all">
+                    {remote.remote_id}
                   </p>
                 </div>
-                <Image
-                  src={renderSvg("remote")}
-                  alt="Remote icon"
-                  className="w-8 h-8"
-                  width={32}
-                  height={32}
-                />
-              </div>
 
-              <div className="grid grid-cols-8 gap-3">
-                {["A", "B", "C", "D", "E", "F", "Y", "N"].map((button) => (
-                  <div
-                    key={button}
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-tthoves-semiBold transition-all duration-200 ${
-                      isButtonPressed(remote.remote_id, button)
-                        ? "bg-green-500 text-white scale-110 shadow-lg border-2 border-green-600"
-                        : "bg-white text-[#4A4A4F] border-2 border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    {button}
-                  </div>
-                ))}
+                {/* Current Button Press Display */}
+                <div className="flex-grow flex items-center justify-center mb-3">
+                  {currentPress ? (
+                    <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white font-tthoves-bold text-lg shadow-lg animate-pulse">
+                      {currentPress.button}
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 font-tthoves-bold text-lg">
+                      -
+                    </div>
+                  )}
+                </div>
+
+                {/* Previous Button Value */}
+                <div className="text-center">
+                  <p className="text-xs text-[#6B7280]">
+                    Last: {previousPress ? (
+                      <span className="font-tthoves-semiBold text-[#4A4A4F]">
+                        {previousPress.button} ({new Date(previousPress.timestamp).toLocaleTimeString()})
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">None</span>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
+        {/* Recent Activity Log */}
         {buttonPresses.length > 0 && (
           <div className="mt-6">
-            <h3 className="text-lg font-tthoves-semiBold mb-3">Recent Button Presses:</h3>
-            <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto">
-              {buttonPresses.slice(-10).reverse().map((press, index) => (
-                <div key={index} className="text-sm text-[#4A4A4F] mb-1">
-                  <span className="font-tthoves-semiBold">{press.remoteName}</span> pressed 
-                  <span className="mx-1 px-2 py-1 bg-blue-100 rounded text-xs">{press.buttonPressed}</span>
-                  at {new Date(press.timestamp).toLocaleTimeString()}
+            <h3 className="text-lg font-tthoves-semiBold mb-3">Recent Activity:</h3>
+            <div className="bg-gray-50 rounded-lg p-4 max-h-32 overflow-y-auto">
+              {buttonPresses.slice(-8).reverse().map((press, index) => (
+                <div key={index} className="text-sm text-[#4A4A4F] mb-1 flex justify-between items-center">
+                  <span>
+                    <span className="font-tthoves-semiBold">{press.remoteName}</span> pressed
+                    <span className="mx-1 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-tthoves-semiBold">
+                      {press.buttonPressed}
+                    </span>
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(press.timestamp).toLocaleTimeString()}
+                  </span>
                 </div>
               ))}
             </div>

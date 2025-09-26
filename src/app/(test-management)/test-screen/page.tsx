@@ -150,10 +150,14 @@ export default function TestScreen() {
   }, []);
 
   useEffect(() => {
-    const handleDisconnect = (event: USBDeviceEvent) => {
-      setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue." + event.device.serialNumber);
-      usbListeningRef.current = false;
+    interface USBDisconnectEvent extends Event {
+      device?: USBDevice;
+    }
+
+    const handleDisconnect = (event: USBDisconnectEvent) => {
+      console.log("USB disconnect event:", event);
+      setError("USB device disconnected. Please reconnect to continue.");
+      usbListeningRef.current = false; // Ensure this stops the loop
       deviceRef.current = null;
     };
 
@@ -167,19 +171,38 @@ export default function TestScreen() {
       const deviceInfo = JSON.parse(
         localStorage.getItem("currentDeviceInfo") || "{}"
       );
-      if (!deviceInfo.vendorId || !deviceInfo.productId) {
-        throw new Error("No device information found in localStorage.");
-      }
 
+      // First try to find device by vendor/product ID only (ignore serial number)
       const devices = await navigator.usb.getDevices();
-
-      const device = devices.find(
+      let device = devices.find(
         (d) =>
-          d.vendorId === deviceInfo.vendorId &&
-          d.productId === deviceInfo.productId &&
-          (!deviceInfo.serialNumber ||
-            d.serialNumber === deviceInfo.serialNumber)
+          d.vendorId === 0xb1b0 &&
+          (d.productId === 0x8055 || d.productId === 0x5508)
       );
+
+      // If device not found in authorized devices, request authorization
+      if (!device) {
+        console.log("Device not found in authorized devices, requesting authorization...");
+        try {
+          device = await navigator.usb.requestDevice({
+            filters: [
+              { vendorId: 0xb1b0, productId: 0x8055 },
+              { vendorId: 0xb1b0, productId: 0x5508 }
+            ],
+          });
+
+          // Update localStorage with the newly authorized device info (without serial number)
+          localStorage.setItem(
+            "currentDeviceInfo",
+            JSON.stringify({
+              vendorId: device.vendorId,
+              productId: device.productId,
+            })
+          );
+        } catch (requestError) {
+          throw new Error("Device authorization was cancelled or failed. Please try again.");
+        }
+      }
 
       if (!device) {
         throw new Error("Device not found or not authorized.");
@@ -257,8 +280,14 @@ export default function TestScreen() {
       setError(null);
       usbListeningRef.current = true;
 
-      while (true) {
+      // ✅ FIXED LOOP - Changed from while(true) to proper condition
+      while (usbListeningRef.current && deviceRef.current) {
         try {
+          // Check if device is still connected before transfer
+          if (!deviceRef.current || !usbListeningRef.current) {
+            break;
+          }
+
           const result = await deviceRef.current.transferIn(2, 64);
 
           if (result.status === "ok" && result.data) {
@@ -309,13 +338,13 @@ export default function TestScreen() {
                               (r) => r.student_remote_id !== newResponse.student_remote_id
                             );
                             updatedResponses.push(newResponse);
-                            
+
                             return prev.map((q) =>
                               q.question_id === currentQuestionId
                                 ? {
-                                    ...q,
-                                    responses: updatedResponses,
-                                  }
+                                  ...q,
+                                  responses: updatedResponses,
+                                }
                                 : q
                             );
                           }
@@ -349,6 +378,17 @@ export default function TestScreen() {
           }
         } catch (loopError) {
           console.error("Error in USB listening loop:", loopError);
+
+          // Check if it's a disconnect error
+          if (loopError instanceof DOMException &&
+            (loopError.name === 'NetworkError' || loopError.name === 'NotFoundError')) {
+            console.log("Device disconnected during transfer");
+            setError("USB device disconnected. Please reconnect to continue.");
+            usbListeningRef.current = false;
+            break;
+          }
+
+          // For other errors, still break the loop to prevent infinite errors
           setError("Error receiving USB data. Please reconnect the device.");
           usbListeningRef.current = false;
           break;
@@ -357,16 +397,6 @@ export default function TestScreen() {
     } catch (error: unknown) {
       console.error("Error:", error);
       setError("Failed to connect to USB device. Please try again.");
-      usbListeningRef.current = false;
-      setUsbConnected(false);
-    } finally {
-      if (deviceRef.current && deviceRef.current.opened) {
-        try {
-          await deviceRef.current.close();
-        } catch (closeError) {
-          console.error("Error closing device:", closeError);
-        }
-      }
     }
   }
 
@@ -392,14 +422,14 @@ export default function TestScreen() {
 
   const handleSkipToDashboard = async () => {
     console.log('Skip to dashboard called'); // Debug log
-    
+
     // Calculate progress directly here instead of relying on state
     const calculatedProgress = calculateProgressDirectly();
     console.log('Directly calculated progress:', calculatedProgress); // Debug log
-    
+
     // Update state
     setProgress(calculatedProgress);
-    
+
     // Navigate with the calculated data directly
     navigateToDashboardWithData(calculatedProgress);
   };
@@ -407,17 +437,17 @@ export default function TestScreen() {
   const navigateToDashboardWithData = (calculatedProgress: StudentProgress[]) => {
     console.log('Navigate to dashboard with data called'); // Debug log
     console.log('Using calculated progress:', calculatedProgress); // Debug log
-    
+
     const questionStats = calculateQuestionStats();
-    
+
     // Fix average score calculation using the calculated progress
     let averageScore = 0;
     if (calculatedProgress.length > 0) {
       const studentsWithResponses = calculatedProgress.filter(student => student.answered_questions > 0);
       if (studentsWithResponses.length > 0) {
         const totalScore = studentsWithResponses.reduce((sum, student) => {
-          const studentPercentage = student.max_score > 0 
-            ? (student.score_obtained / student.max_score) * 100 
+          const studentPercentage = student.max_score > 0
+            ? (student.score_obtained / student.max_score) * 100
             : 0;
           return sum + studentPercentage;
         }, 0);
@@ -484,15 +514,15 @@ export default function TestScreen() {
       // Process each question up to current question when skipping
       testData.questions.forEach((question, questionIndex) => {
         const correctOption = question.options.find(opt => opt.isCorrect);
-        
+
         // Only process questions that have been presented (up to current question index)
         const questionHasBeenPresented = questionIndex <= currentQuestionIndex;
-        
+
         if (questionHasBeenPresented) {
           const questionResponse = responses.find(
             (qr) => qr.question_id === question.question_id
           );
-          
+
           // Get the latest response for this student and question (based on timestamp)
           let studentResponse = null;
           if (questionResponse) {
@@ -531,7 +561,7 @@ export default function TestScreen() {
       const correctAnswers = studentAnswers.filter(answer => answer.is_correct).length;
       const answeredQuestions = studentAnswers.filter(answer => answer.selected_option_id !== null).length;
       const incorrectAnswered = studentAnswers.filter(answer => answer.selected_option_id !== null && !answer.is_correct).length;
-      
+
       // For partial tests, only count questions that were actually presented
       const questionsPresented = currentQuestionIndex + 1; // +1 because index is 0-based
       const unansweredQuestions = questionsPresented - answeredQuestions;
@@ -568,15 +598,15 @@ export default function TestScreen() {
       );
 
       const totalResponses = questionResponse ? questionResponse.responses.length : 0;
-      
+
       let correctResponses = 0;
       const optionStats = question.options.map(option => {
-        const responseCount = questionResponse 
+        const responseCount = questionResponse
           ? questionResponse.responses.filter(
-              r => r.student_remote_response === option.option_id
-            ).length 
+            r => r.student_remote_response === option.option_id
+          ).length
           : 0;
-        
+
         if (option.isCorrect) {
           correctResponses = responseCount;
         }
@@ -604,17 +634,17 @@ export default function TestScreen() {
   const navigateToDashboard = () => {
     console.log('Navigate to dashboard called'); // Debug log
     console.log('Current progress state:', progress); // Debug log
-    
+
     const questionStats = calculateQuestionStats();
-    
+
     // Fix average score calculation to handle cases with no progress data
     let averageScore = 0;
     if (progress.length > 0) {
       const studentsWithResponses = progress.filter(student => student.answered_questions > 0);
       if (studentsWithResponses.length > 0) {
         const totalScore = studentsWithResponses.reduce((sum, student) => {
-          const studentPercentage = student.max_score > 0 
-            ? (student.score_obtained / student.max_score) * 100 
+          const studentPercentage = student.max_score > 0
+            ? (student.score_obtained / student.max_score) * 100
             : 0;
           return sum + studentPercentage;
         }, 0);
@@ -661,7 +691,7 @@ export default function TestScreen() {
             <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
               {question.question_text}
             </h3>
-            
+
             {/* Question Options */}
             <div className="space-y-3 mb-8">
               {question.options.map((option, index) => (
@@ -726,14 +756,14 @@ export default function TestScreen() {
                   Time Left: {timeLeft}s
                 </div>
               </div>
-              
+
               {/* Response Status Summary */}
               <div className="mb-4 p-3 bg-white rounded-lg">
                 <div className="text-sm font-tthoves text-[#4A4A4F] mb-2">
                   Response Progress: {currentResponses.length}/{allRemotes.length} students responded
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${(currentResponses.length / allRemotes.length) * 100}%` }}
                   ></div>
@@ -748,25 +778,23 @@ export default function TestScreen() {
                       response.student_remote_id === remote.student_remote_id
                   );
                   const hasResponded = !!matchingResponse;
-                  
+
                   // Get the selected option text if student responded
-                  const selectedOption = hasResponded 
+                  const selectedOption = hasResponded
                     ? question.options.find(opt => opt.option_id === matchingResponse.student_remote_response)
                     : null;
 
                   return (
                     <div
                       key={index}
-                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-200 ${
-                        hasResponded 
-                          ? "bg-green-50 border-green-200" 
-                          : "bg-white border-gray-200"
-                      }`}
+                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-200 ${hasResponded
+                        ? "bg-green-50 border-green-200"
+                        : "bg-white border-gray-200"
+                        }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
-                          hasResponded ? "bg-green-500" : "bg-gray-400"
-                        }`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${hasResponded ? "bg-green-500" : "bg-gray-400"
+                          }`}>
                           {hasResponded ? "✓" : index + 1}
                         </div>
                         <div>
@@ -780,10 +808,9 @@ export default function TestScreen() {
                           )}
                         </div>
                       </div>
-                      
-                      <div className={`w-3 h-3 rounded-full ${
-                        hasResponded ? "bg-green-500" : "bg-gray-300"
-                      }`}></div>
+
+                      <div className={`w-3 h-3 rounded-full ${hasResponded ? "bg-green-500" : "bg-gray-300"
+                        }`}></div>
                     </div>
                   );
                 })}
@@ -880,7 +907,7 @@ export default function TestScreen() {
             <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F] mb-4">
               Response Summary
             </h4>
-            
+
             {/* Show response breakdown by option */}
             <div className="space-y-3">
               {question.options.map((option, index) => {
@@ -888,8 +915,8 @@ export default function TestScreen() {
                   r => r.student_remote_response === option.option_id
                 );
                 const responseCount = optionResponses.length;
-                const percentage = currentResponses.length > 0 
-                  ? (responseCount / currentResponses.length) * 100 
+                const percentage = currentResponses.length > 0
+                  ? (responseCount / currentResponses.length) * 100
                   : 0;
 
                 return (
@@ -913,10 +940,9 @@ export default function TestScreen() {
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5">
-                      <div 
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          option.isCorrect ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-300 ${option.isCorrect ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
                         style={{ width: `${Math.max(percentage, 2)}%` }}
                       ></div>
                     </div>
@@ -1105,13 +1131,12 @@ export default function TestScreen() {
                           {item.score_obtained}/{item.max_score}
                         </td>
                         <td className="border border-gray-200 p-3 text-center font-tthoves">
-                          <span className={`px-2 py-1 rounded-full text-sm font-semibold ${
-                            (item.score_obtained / item.max_score) * 100 >= 70
-                              ? 'bg-green-100 text-green-800'
-                              : (item.score_obtained / item.max_score) * 100 >= 50
+                          <span className={`px-2 py-1 rounded-full text-sm font-semibold ${(item.score_obtained / item.max_score) * 100 >= 70
+                            ? 'bg-green-100 text-green-800'
+                            : (item.score_obtained / item.max_score) * 100 >= 50
                               ? 'bg-yellow-100 text-yellow-800'
                               : 'bg-red-100 text-red-800'
-                          }`}>
+                            }`}>
                             {Math.round((item.score_obtained / item.max_score) * 100)}%
                           </span>
                         </td>
