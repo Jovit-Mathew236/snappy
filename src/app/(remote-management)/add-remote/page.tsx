@@ -60,6 +60,43 @@ const ScanConnector: React.FC = () => {
    initialize();
  }, []);
 
+useEffect(() => {
+  const worker = new Worker(new URL("@/workers/usbWorker.ts", import.meta.url), {
+    type: "module",
+  });
+
+  worker.postMessage({ type: "INIT" });
+
+  worker.onmessage = (event) => {
+    const { type, payload } = event.data;
+
+    if (type === "INIT_SUCCESS") {
+      console.log("Worker initialized");
+    }
+    if (type === "CONNECTED") {
+      setVendorId(payload.vendorId);
+      setShowReceiver(true);
+    }
+    if (type === "REMOTE_FOUND") {
+      setStudentRemotes((prev) => {
+        if (prev.some((r) => r.remote_id === payload.MAC)) return prev;
+        return [...prev, { remote_id: payload.MAC, remote_name: "" }];
+      });
+    }
+    if (type === "DISCONNECTED") {
+      setVendorId(null);
+      setStudentRemotes([]);
+    }
+    if (type === "ERROR") {
+      setError(payload);
+    }
+  };
+
+  return () => {
+    worker.terminate();
+  };
+}, []);
+
  async function sendCommandAndListen(device: USBDevice) {
    try {
      await device.open();

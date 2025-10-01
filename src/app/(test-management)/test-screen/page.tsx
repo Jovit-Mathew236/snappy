@@ -152,7 +152,10 @@ export default function TestScreen() {
   useEffect(() => {
     const handleDisconnect = (event: USBDeviceEvent) => {
       setUsbConnected(false);
-      setError("USB device disconnected. Please reconnect to continue." + event.device.serialNumber);
+      setError(
+        "USB device disconnected. Please reconnect to continue." +
+          event.device.serialNumber
+      );
       usbListeningRef.current = false;
       deviceRef.current = null;
     };
@@ -291,11 +294,16 @@ export default function TestScreen() {
                       if (matchingRemote) {
                         // Map button value (1,2,3,4) to option index (0,1,2,3) then to option_id
                         const buttonIndex = jsonData.value - 1; // Convert 1,2,3,4 to 0,1,2,3
-                        const selectedOption = testData?.questions[currentIndex].options[buttonIndex];
+                        const selectedOption =
+                          testData?.questions[currentIndex].options[
+                            buttonIndex
+                          ];
 
                         const newResponse: RemoteResponse = {
                           student_remote_id: matchingRemote.student_remote_id,
-                          student_remote_response: selectedOption?.option_id || `option_${jsonData.value}`,
+                          student_remote_response:
+                            selectedOption?.option_id ||
+                            `option_${jsonData.value}`,
                           timestamp: Date.now(),
                         };
                         setResponses((prev) => {
@@ -305,11 +313,14 @@ export default function TestScreen() {
 
                           if (existingQuestion) {
                             // Remove any existing response from this remote and add the new one
-                            const updatedResponses = existingQuestion.responses.filter(
-                              (r) => r.student_remote_id !== newResponse.student_remote_id
-                            );
+                            const updatedResponses =
+                              existingQuestion.responses.filter(
+                                (r) =>
+                                  r.student_remote_id !==
+                                  newResponse.student_remote_id
+                              );
                             updatedResponses.push(newResponse);
-                            
+
                             return prev.map((q) =>
                               q.question_id === currentQuestionId
                                 ? {
@@ -385,40 +396,45 @@ export default function TestScreen() {
   };
 
   const handleSubmit = () => {
-    console.log('handleSubmit called'); // Debug log
+    console.log("handleSubmit called"); // Debug log
     const calculatedProgress = calculateProgressDirectly();
     setProgress(calculatedProgress);
   };
 
   const handleSkipToDashboard = async () => {
-    console.log('Skip to dashboard called'); // Debug log
-    
+    console.log("Skip to dashboard called"); // Debug log
+
     // Calculate progress directly here instead of relying on state
     const calculatedProgress = calculateProgressDirectly();
-    console.log('Directly calculated progress:', calculatedProgress); // Debug log
-    
+    console.log("Directly calculated progress:", calculatedProgress); // Debug log
+
     // Update state
     setProgress(calculatedProgress);
-    
+
     // Navigate with the calculated data directly
     navigateToDashboardWithData(calculatedProgress);
   };
 
-  const navigateToDashboardWithData = (calculatedProgress: StudentProgress[]) => {
-    console.log('Navigate to dashboard with data called'); // Debug log
-    console.log('Using calculated progress:', calculatedProgress); // Debug log
-    
+  const navigateToDashboardWithData = (
+    calculatedProgress: StudentProgress[]
+  ) => {
+    console.log("Navigate to dashboard with data called"); // Debug log
+    console.log("Using calculated progress:", calculatedProgress); // Debug log
+
     const questionStats = calculateQuestionStats();
-    
+
     // Fix average score calculation using the calculated progress
     let averageScore = 0;
     if (calculatedProgress.length > 0) {
-      const studentsWithResponses = calculatedProgress.filter(student => student.answered_questions > 0);
+      const studentsWithResponses = calculatedProgress.filter(
+        (student) => student.answered_questions > 0
+      );
       if (studentsWithResponses.length > 0) {
         const totalScore = studentsWithResponses.reduce((sum, student) => {
-          const studentPercentage = student.max_score > 0 
-            ? (student.score_obtained / student.max_score) * 100 
-            : 0;
+          const studentPercentage =
+            student.max_score > 0
+              ? (student.score_obtained / student.max_score) * 100
+              : 0;
           return sum + studentPercentage;
         }, 0);
         averageScore = totalScore / studentsWithResponses.length;
@@ -438,11 +454,14 @@ export default function TestScreen() {
       question_stats: questionStats,
       student_results: calculatedProgress, // Use calculated progress directly
       is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
-      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`,
     };
 
-    console.log('Dashboard data being saved:', dashboardData); // Debug log
-    console.log('Student results length:', dashboardData.student_results.length); // Debug log
+    console.log("Dashboard data being saved:", dashboardData); // Debug log
+    console.log(
+      "Student results length:",
+      dashboardData.student_results.length
+    ); // Debug log
 
     // Save to localStorage for the dashboard to access
     localStorage.setItem("testResults", JSON.stringify(dashboardData));
@@ -452,10 +471,10 @@ export default function TestScreen() {
   const calculateProgressDirectly = () => {
     if (!testData) return [];
 
-    console.log('Calculating progress directly'); // Debug log
-    console.log('Current responses:', responses); // Debug log
-    console.log('All remotes:', allRemotes); // Debug log
-    console.log('Current question index:', currentQuestionIndex); // Debug log
+    console.log("Calculating progress directly"); // Debug log
+    console.log("Current responses:", responses); // Debug log
+    console.log("All remotes:", allRemotes); // Debug log
+    console.log("Current question index:", currentQuestionIndex); // Debug log
 
     // Create detailed answer mapping for each student
     const answerMappings: {
@@ -483,16 +502,16 @@ export default function TestScreen() {
 
       // Process each question up to current question when skipping
       testData.questions.forEach((question, questionIndex) => {
-        const correctOption = question.options.find(opt => opt.isCorrect);
-        
+        const correctOption = question.options.find((opt) => opt.isCorrect);
+
         // Only process questions that have been presented (up to current question index)
         const questionHasBeenPresented = questionIndex <= currentQuestionIndex;
-        
+
         if (questionHasBeenPresented) {
           const questionResponse = responses.find(
             (qr) => qr.question_id === question.question_id
           );
-          
+
           // Get the latest response for this student and question (based on timestamp)
           let studentResponse = null;
           if (questionResponse) {
@@ -501,12 +520,17 @@ export default function TestScreen() {
             );
             if (studentResponses.length > 0) {
               // Sort by timestamp and take the latest one
-              studentResponse = studentResponses.sort((a, b) => b.timestamp - a.timestamp)[0];
+              studentResponse = studentResponses.sort(
+                (a, b) => b.timestamp - a.timestamp
+              )[0];
             }
           }
 
           const selectedOption = studentResponse
-            ? question.options.find(opt => opt.option_id === studentResponse.student_remote_response)
+            ? question.options.find(
+                (opt) =>
+                  opt.option_id === studentResponse.student_remote_response
+              )
             : null;
 
           const isCorrect = selectedOption ? selectedOption.isCorrect : false;
@@ -528,10 +552,16 @@ export default function TestScreen() {
     // Calculate progress based on answer mappings
     const calculatedProgress = allRemotes.map((remote) => {
       const studentAnswers = answerMappings[remote.student_remote_id].answers;
-      const correctAnswers = studentAnswers.filter(answer => answer.is_correct).length;
-      const answeredQuestions = studentAnswers.filter(answer => answer.selected_option_id !== null).length;
-      const incorrectAnswered = studentAnswers.filter(answer => answer.selected_option_id !== null && !answer.is_correct).length;
-      
+      const correctAnswers = studentAnswers.filter(
+        (answer) => answer.is_correct
+      ).length;
+      const answeredQuestions = studentAnswers.filter(
+        (answer) => answer.selected_option_id !== null
+      ).length;
+      const incorrectAnswered = studentAnswers.filter(
+        (answer) => answer.selected_option_id !== null && !answer.is_correct
+      ).length;
+
       // For partial tests, only count questions that were actually presented
       const questionsPresented = currentQuestionIndex + 1; // +1 because index is 0-based
       const unansweredQuestions = questionsPresented - answeredQuestions;
@@ -550,33 +580,41 @@ export default function TestScreen() {
       };
     });
 
-    console.log('Final calculated progress:', calculatedProgress); // Debug log
+    console.log("Final calculated progress:", calculatedProgress); // Debug log
     return calculatedProgress;
   };
 
   const calculateQuestionStats = () => {
     if (!testData) return [];
 
-    console.log('Calculating question stats for questions 0 to', currentQuestionIndex); // Debug log
+    console.log(
+      "Calculating question stats for questions 0 to",
+      currentQuestionIndex
+    ); // Debug log
 
     // Only calculate stats for questions that have been presented
-    const questionsToAnalyze = testData.questions.slice(0, currentQuestionIndex + 1);
+    const questionsToAnalyze = testData.questions.slice(
+      0,
+      currentQuestionIndex + 1
+    );
 
     return questionsToAnalyze.map((question) => {
       const questionResponse = responses.find(
         (qr) => qr.question_id === question.question_id
       );
 
-      const totalResponses = questionResponse ? questionResponse.responses.length : 0;
-      
+      const totalResponses = questionResponse
+        ? questionResponse.responses.length
+        : 0;
+
       let correctResponses = 0;
-      const optionStats = question.options.map(option => {
-        const responseCount = questionResponse 
+      const optionStats = question.options.map((option) => {
+        const responseCount = questionResponse
           ? questionResponse.responses.filter(
-              r => r.student_remote_response === option.option_id
-            ).length 
+              (r) => r.student_remote_response === option.option_id
+            ).length
           : 0;
-        
+
         if (option.isCorrect) {
           correctResponses = responseCount;
         }
@@ -585,8 +623,9 @@ export default function TestScreen() {
           option_id: option.option_id,
           option_text: option.option_text,
           response_count: responseCount,
-          percentage: totalResponses > 0 ? (responseCount / totalResponses) * 100 : 0,
-          is_correct: option.isCorrect
+          percentage:
+            totalResponses > 0 ? (responseCount / totalResponses) * 100 : 0,
+          is_correct: option.isCorrect,
         };
       });
 
@@ -595,27 +634,31 @@ export default function TestScreen() {
         question_text: question.question_text,
         total_responses: totalResponses,
         correct_responses: correctResponses,
-        percentage_correct: totalResponses > 0 ? (correctResponses / totalResponses) * 100 : 0,
-        options: optionStats
+        percentage_correct:
+          totalResponses > 0 ? (correctResponses / totalResponses) * 100 : 0,
+        options: optionStats,
       };
     });
   };
 
   const navigateToDashboard = () => {
-    console.log('Navigate to dashboard called'); // Debug log
-    console.log('Current progress state:', progress); // Debug log
-    
+    console.log("Navigate to dashboard called"); // Debug log
+    console.log("Current progress state:", progress); // Debug log
+
     const questionStats = calculateQuestionStats();
-    
+
     // Fix average score calculation to handle cases with no progress data
     let averageScore = 0;
     if (progress.length > 0) {
-      const studentsWithResponses = progress.filter(student => student.answered_questions > 0);
+      const studentsWithResponses = progress.filter(
+        (student) => student.answered_questions > 0
+      );
       if (studentsWithResponses.length > 0) {
         const totalScore = studentsWithResponses.reduce((sum, student) => {
-          const studentPercentage = student.max_score > 0 
-            ? (student.score_obtained / student.max_score) * 100 
-            : 0;
+          const studentPercentage =
+            student.max_score > 0
+              ? (student.score_obtained / student.max_score) * 100
+              : 0;
           return sum + studentPercentage;
         }, 0);
         averageScore = totalScore / studentsWithResponses.length;
@@ -635,10 +678,10 @@ export default function TestScreen() {
       question_stats: questionStats,
       student_results: progress, // This should now contain actual student data
       is_partial_test: questionsPresented < totalQuestionsInTest, // Flag to indicate partial test
-      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`
+      completion_status: `${questionsPresented}/${totalQuestionsInTest} questions completed`,
     };
 
-    console.log('Dashboard data being saved:', dashboardData); // Debug log
+    console.log("Dashboard data being saved:", dashboardData); // Debug log
 
     // Save to localStorage for the dashboard to access
     localStorage.setItem("testResults", JSON.stringify(dashboardData));
@@ -661,7 +704,7 @@ export default function TestScreen() {
             <h3 className="text-xl font-tthoves text-[#4A4A4F] mb-6">
               {question.question_text}
             </h3>
-            
+
             {/* Question Options */}
             <div className="space-y-3 mb-8">
               {question.options.map((option, index) => (
@@ -672,7 +715,9 @@ export default function TestScreen() {
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
                     {String.fromCharCode(65 + index)}
                   </div>
-                  <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
+                  <span className="text-lg text-[#4A4A4F] font-tthoves">
+                    {option.option_text}
+                  </span>
                 </div>
               ))}
             </div>
@@ -681,14 +726,15 @@ export default function TestScreen() {
             {question.images && question.images.length > 0 && (
               <div className="mb-8">
                 {(() => {
-                  const gridColsClass = {
-                    1: "grid-cols-1",
-                    2: "grid-cols-2",
-                    3: "grid-cols-3",
-                    4: "grid-cols-4",
-                    5: "grid-cols-5",
-                    6: "grid-cols-6",
-                  }[question.images.length] || "grid-cols-4"; // fallback
+                  const gridColsClass =
+                    {
+                      1: "grid-cols-1",
+                      2: "grid-cols-2",
+                      3: "grid-cols-3",
+                      4: "grid-cols-4",
+                      5: "grid-cols-5",
+                      6: "grid-cols-6",
+                    }[question.images.length] || "grid-cols-4"; // fallback
 
                   return (
                     <div className={`grid gap-4 ${gridColsClass}`}>
@@ -696,10 +742,14 @@ export default function TestScreen() {
                         <div key={index} className="flex flex-col items-center">
                           <img
                             src={`/assets/questions/${imageName}`}
-                            alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                            alt={`Question ${
+                              currentQuestionIndex + 1
+                            } - Image ${index + 1}`}
                             className="rounded-lg border border-gray-300 shadow-sm"
                             onError={(e) => {
-                              console.error(`Failed to load image: ${imageName}`);
+                              console.error(
+                                `Failed to load image: ${imageName}`
+                              );
                               e.currentTarget.style.display = "none";
                             }}
                           />
@@ -726,16 +776,21 @@ export default function TestScreen() {
                   Time Left: {timeLeft}s
                 </div>
               </div>
-              
+
               {/* Response Status Summary */}
               <div className="mb-4 p-3 bg-white rounded-lg">
                 <div className="text-sm font-tthoves text-[#4A4A4F] mb-2">
-                  Response Progress: {currentResponses.length}/{allRemotes.length} students responded
+                  Response Progress: {currentResponses.length}/
+                  {allRemotes.length} students responded
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(currentResponses.length / allRemotes.length) * 100}%` }}
+                    style={{
+                      width: `${
+                        (currentResponses.length / allRemotes.length) * 100
+                      }%`,
+                    }}
                   ></div>
                 </div>
               </div>
@@ -748,25 +803,31 @@ export default function TestScreen() {
                       response.student_remote_id === remote.student_remote_id
                   );
                   const hasResponded = !!matchingResponse;
-                  
+
                   // Get the selected option text if student responded
-                  const selectedOption = hasResponded 
-                    ? question.options.find(opt => opt.option_id === matchingResponse.student_remote_response)
+                  const selectedOption = hasResponded
+                    ? question.options.find(
+                        (opt) =>
+                          opt.option_id ===
+                          matchingResponse.student_remote_response
+                      )
                     : null;
 
                   return (
                     <div
                       key={index}
                       className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all duration-200 ${
-                        hasResponded 
-                          ? "bg-green-50 border-green-200" 
+                        hasResponded
+                          ? "bg-green-50 border-green-200"
                           : "bg-white border-gray-200"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
-                          hasResponded ? "bg-green-500" : "bg-gray-400"
-                        }`}>
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
+                            hasResponded ? "bg-green-500" : "bg-gray-400"
+                          }`}
+                        >
                           {hasResponded ? "✓" : index + 1}
                         </div>
                         <div>
@@ -775,15 +836,24 @@ export default function TestScreen() {
                           </div>
                           {hasResponded && selectedOption && (
                             <div className="text-xs text-gray-600">
-                              Selected: {String.fromCharCode(65 + question.options.findIndex(opt => opt.option_id === selectedOption.option_id))}
+                              Selected:{" "}
+                              {String.fromCharCode(
+                                65 +
+                                  question.options.findIndex(
+                                    (opt) =>
+                                      opt.option_id === selectedOption.option_id
+                                  )
+                              )}
                             </div>
                           )}
                         </div>
                       </div>
-                      
-                      <div className={`w-3 h-3 rounded-full ${
-                        hasResponded ? "bg-green-500" : "bg-gray-300"
-                      }`}></div>
+
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          hasResponded ? "bg-green-500" : "bg-gray-300"
+                        }`}
+                      ></div>
                     </div>
                   );
                 })}
@@ -833,21 +903,24 @@ export default function TestScreen() {
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#5423E6] text-white flex items-center justify-center font-semibold">
                   {String.fromCharCode(65 + index)}
                 </div>
-                <span className="text-lg text-[#4A4A4F] font-tthoves">{option.option_text}</span>
+                <span className="text-lg text-[#4A4A4F] font-tthoves">
+                  {option.option_text}
+                </span>
               </div>
             ))}
           </div>
           {question.images && question.images.length > 0 && (
             <div className="mb-8">
               {(() => {
-                const gridColsClass = {
-                  1: "grid-cols-1",
-                  2: "grid-cols-2",
-                  3: "grid-cols-3",
-                  4: "grid-cols-4",
-                  5: "grid-cols-5",
-                  6: "grid-cols-6",
-                }[question.images.length] || "grid-cols-4";
+                const gridColsClass =
+                  {
+                    1: "grid-cols-1",
+                    2: "grid-cols-2",
+                    3: "grid-cols-3",
+                    4: "grid-cols-4",
+                    5: "grid-cols-5",
+                    6: "grid-cols-6",
+                  }[question.images.length] || "grid-cols-4";
 
                 return (
                   <div className={`grid gap-4 ${gridColsClass}`}>
@@ -855,7 +928,9 @@ export default function TestScreen() {
                       <div key={index} className="flex flex-col items-center">
                         <img
                           src={`/assets/questions/${imageName}`}
-                          alt={`Question ${currentQuestionIndex + 1} - Image ${index + 1}`}
+                          alt={`Question ${currentQuestionIndex + 1} - Image ${
+                            index + 1
+                          }`}
                           className="rounded-lg border border-gray-300 shadow-sm"
                           onError={(e) => {
                             console.error(`Failed to load image: ${imageName}`);
@@ -880,20 +955,24 @@ export default function TestScreen() {
             <h4 className="text-lg font-tthoves-semiBold text-[#4A4A4F] mb-4">
               Response Summary
             </h4>
-            
+
             {/* Show response breakdown by option */}
             <div className="space-y-3">
               {question.options.map((option, index) => {
                 const optionResponses = currentResponses.filter(
-                  r => r.student_remote_response === option.option_id
+                  (r) => r.student_remote_response === option.option_id
                 );
                 const responseCount = optionResponses.length;
-                const percentage = currentResponses.length > 0 
-                  ? (responseCount / currentResponses.length) * 100 
-                  : 0;
+                const percentage =
+                  currentResponses.length > 0
+                    ? (responseCount / currentResponses.length) * 100
+                    : 0;
 
                 return (
-                  <div key={option.option_id} className="bg-white rounded-lg p-3">
+                  <div
+                    key={option.option_id}
+                    className="bg-white rounded-lg p-3"
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-6 h-6 rounded-full bg-[#5423E6] text-white flex items-center justify-center text-sm font-semibold">
@@ -913,9 +992,9 @@ export default function TestScreen() {
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5">
-                      <div 
+                      <div
                         className={`h-1.5 rounded-full transition-all duration-300 ${
-                          option.isCorrect ? 'bg-green-500' : 'bg-blue-500'
+                          option.isCorrect ? "bg-green-500" : "bg-blue-500"
                         }`}
                         style={{ width: `${Math.max(percentage, 2)}%` }}
                       ></div>
@@ -1105,14 +1184,21 @@ export default function TestScreen() {
                           {item.score_obtained}/{item.max_score}
                         </td>
                         <td className="border border-gray-200 p-3 text-center font-tthoves">
-                          <span className={`px-2 py-1 rounded-full text-sm font-semibold ${
-                            (item.score_obtained / item.max_score) * 100 >= 70
-                              ? 'bg-green-100 text-green-800'
-                              : (item.score_obtained / item.max_score) * 100 >= 50
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {Math.round((item.score_obtained / item.max_score) * 100)}%
+                          <span
+                            className={`px-2 py-1 rounded-full text-sm font-semibold ${
+                              (item.score_obtained / item.max_score) * 100 >= 70
+                                ? "bg-green-100 text-green-800"
+                                : (item.score_obtained / item.max_score) *
+                                    100 >=
+                                  50
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {Math.round(
+                              (item.score_obtained / item.max_score) * 100
+                            )}
+                            %
                           </span>
                         </td>
                       </tr>
