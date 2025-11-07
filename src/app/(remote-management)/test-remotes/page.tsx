@@ -63,6 +63,7 @@ const TestRemotesPage: React.FC = () => {
   const platform = getOS();
   const deviceRef = useRef<USBDevice | null>(null);
   const usbListeningRef = useRef<boolean>(false);
+  const timersRef = useRef<{ [remoteId: string]: NodeJS.Timeout }>({});
 
   const selectedReceiverData = receivers.find(r => r.receiverID === selectedReceiver);
 
@@ -134,28 +135,29 @@ const TestRemotesPage: React.FC = () => {
     }
   }, [receivers]);
   useEffect(() => {
-    const timers: { [remoteId: string]: NodeJS.Timeout } = {};
-
     Object.entries(lastButtonPress).forEach(([remoteId, press]) => {
-      const timeSincePress = Date.now() - press.timestamp;
-      if (timeSincePress < 3000) {
-        timers[remoteId] = setTimeout(() => {
-          // Move current press to previous and clear current
-          setPreviousButtonPress(prev => ({
-            ...prev,
-            [remoteId]: { button: press.button, timestamp: press.timestamp }
-          }));
-          setLastButtonPress(prev => {
-            const updated = { ...prev };
-            delete updated[remoteId];
-            return updated;
-          });
-        }, 3000 - timeSincePress);
+      if (timersRef.current[remoteId]) {
+        clearTimeout(timersRef.current[remoteId]);
       }
+
+      timersRef.current[remoteId] = setTimeout(() => {
+        setPreviousButtonPress(prev => ({
+          ...prev,
+          [remoteId]: { button: press.button, timestamp: press.timestamp }
+        }));
+        setLastButtonPress(prev => {
+          const updated = { ...prev };
+          delete updated[remoteId];
+          return updated;
+        });
+
+        delete timersRef.current[remoteId];
+      }, 3000);
     });
 
     return () => {
-      Object.values(timers).forEach(timer => clearTimeout(timer));
+      Object.values(timersRef.current).forEach(timer => clearTimeout(timer));
+      timersRef.current = {};
     };
   }, [lastButtonPress]);
 
