@@ -64,6 +64,7 @@ const TestRemotesPage: React.FC = () => {
   const deviceRef = useRef<USBDevice | null>(null);
   const usbListeningRef = useRef<boolean>(false);
   const timersRef = useRef<{ [remoteId: string]: NodeJS.Timeout }>({});
+  const bufferAccumulatorRef = useRef<Uint8Array>(new Uint8Array(0));
 
   const selectedReceiverData = receivers.find(r => r.receiverID === selectedReceiver);
 
@@ -273,6 +274,7 @@ const TestRemotesPage: React.FC = () => {
       setIsLoading(false);
       usbListeningRef.current = true;
       setScreenState("testing");
+      bufferAccumulatorRef.current = new Uint8Array(0); // Reset buffer
 
       // ✅ FIXED LOOP - Start listening for button presses
       while (usbListeningRef.current && deviceRef.current) {
@@ -285,9 +287,28 @@ const TestRemotesPage: React.FC = () => {
           const result = await deviceRef.current.transferIn(2, 64);
 
           if (result.status === "ok" && result.data) {
-            const int8Array = new Uint8Array(result.data.buffer);
-            if (int8Array.length === 17) {
-              const data = new Uint8Array([...int8Array.slice(0, 17)]);
+            const incomingData = new Uint8Array(result.data.buffer);
+            console.log(
+              `incoming ${incomingData} length: ${incomingData.length}`
+            );
+            // Accumulate incoming data with previous buffer
+            const combinedBuffer = new Uint8Array(bufferAccumulatorRef.current.length + incomingData.length);
+            combinedBuffer.set(bufferAccumulatorRef.current, 0);
+            combinedBuffer.set(incomingData, bufferAccumulatorRef.current.length);
+
+            // Process messages by splitting on \r\n (13, 10)
+            let startIndex = 0;
+
+            for (let i = 0; i < combinedBuffer.length - 1; i++) {
+              // Check for \r\n delimiter (13 = \r, 10 = \n)
+              if (combinedBuffer[i] === 13 && combinedBuffer[i + 1] === 10) {
+                // Extract message from startIndex to current position
+                const messageLength = i - startIndex;
+
+            if (messageLength === 17) {
+              const data = new Uint8Array(combinedBuffer.slice(startIndex, i));
+                  console.log("Processing 17-byte message:", data);
+
               const answer = decrypt(serial_number, data);
 
               if (typeof answer === "string" && answer.trim().startsWith("{")) {
@@ -337,6 +358,22 @@ const TestRemotesPage: React.FC = () => {
                   console.error("JSON parse error:", parseError);
                 }
               }
+                } else if (messageLength > 0) {
+                  console.log(`Skipping message with invalid length: ${messageLength} bytes (expected 17)`);
+                }
+
+                // Move start index past the \r\n delimiter
+                startIndex = i + 2;
+              }
+            }
+
+            // Save any remaining incomplete data for next iteration
+            if (startIndex < combinedBuffer.length) {
+              bufferAccumulatorRef.current = new Uint8Array(combinedBuffer.slice(startIndex));
+              console.log(`Buffering ${bufferAccumulatorRef.current.length} bytes for next iteration`);
+            } else {
+              // All data processed, clear buffer
+              bufferAccumulatorRef.current = new Uint8Array(0);
             }
           }
         } catch (transferError) {
@@ -396,6 +433,7 @@ const TestRemotesPage: React.FC = () => {
     setPreviousButtonPress({});
     setError(null);
     setSelectedReceiver("");
+    bufferAccumulatorRef.current = new Uint8Array(0); // Clear buffer
   };
 
   const handleLoadSavedConfigurations = () => {
